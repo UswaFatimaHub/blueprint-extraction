@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { api } from './client'
+import { api, ApiError } from './client'
 import type {
   BBox,
   DashboardData,
@@ -38,6 +38,8 @@ export const useDocument = (id: string | undefined) =>
     queryKey: ['documents', id],
     queryFn: () => api.get<DocumentDetail>(`/api/documents/${id}`),
     enabled: !!id,
+    retry: (failureCount, error) =>
+      !(error instanceof ApiError && error.status === 404) && failureCount < 1,
     refetchInterval: (query) => {
       const d = query.state.data
       return d && (d.status === 'queued' || d.status === 'processing') ? 1200 : false

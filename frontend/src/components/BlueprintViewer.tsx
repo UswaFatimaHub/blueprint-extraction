@@ -398,23 +398,23 @@ const BlueprintViewer = forwardRef<ViewerHandle, Props>(function BlueprintViewer
   // ---- render ---------------------------------------------------------------------
 
   const toolBtn =
-    'flex h-7 w-7 items-center justify-center rounded-md text-ink-secondary transition-colors hover:bg-surface-3 hover:text-ink disabled:opacity-40 disabled:pointer-events-none'
+    'flex h-9 w-9 items-center justify-center rounded-md text-ink-secondary transition-colors hover:bg-surface-3 hover:text-ink disabled:opacity-40 disabled:pointer-events-none'
 
   return (
-    <div className="relative flex h-full flex-col overflow-hidden rounded-xl border border-line bg-[#05090F]">
+    <div className="relative flex h-full flex-col overflow-hidden rounded-xl border border-line bg-page">
       {/* toolbar */}
       <div className="absolute left-1/2 top-3 z-20 flex -translate-x-1/2 items-center gap-0.5 rounded-lg border border-line-strong bg-surface-1/90 px-1.5 py-1 shadow-pop backdrop-blur-md">
         <button className={toolBtn} onClick={() => zoomBy(1.4)} title="Zoom in">
-          <ZoomIn size={14.5} />
+          <ZoomIn size={16.5} />
         </button>
         <button className={toolBtn} onClick={() => zoomBy(1 / 1.4)} title="Zoom out">
-          <ZoomOut size={14.5} />
+          <ZoomOut size={16.5} />
         </button>
         <button className={toolBtn} onClick={() => fitView(view.r, true)} title="Fit to screen">
-          <Maximize size={13.5} />
+          <Maximize size={15.5} />
         </button>
         <button className={toolBtn} onClick={rotate} title="Rotate 90°">
-          <RotateCw size={13.5} />
+          <RotateCw size={15.5} />
         </button>
         <div className="mx-1 h-4 w-px bg-line-strong" />
         <button
@@ -422,15 +422,15 @@ const BlueprintViewer = forwardRef<ViewerHandle, Props>(function BlueprintViewer
           onClick={() => setShowBoxes((v) => !v)}
           title={showBoxes ? 'Hide bounding boxes (B)' : 'Show bounding boxes (B)'}
         >
-          {showBoxes ? <Eye size={14} /> : <EyeOff size={14} />}
+          {showBoxes ? <Eye size={16} /> : <EyeOff size={16} />}
         </button>
         {pageCount > 1 && (
           <>
             <div className="mx-1 h-4 w-px bg-line-strong" />
             <button className={toolBtn} disabled={page <= 1} onClick={() => setPage((p) => p - 1)} title="Previous page">
-              <ChevronLeft size={15} />
+              <ChevronLeft size={17} />
             </button>
-            <span className="px-1 font-mono text-[11px] tabular-nums text-ink-secondary">
+            <span className="px-1 font-mono text-[12.5px] tabular-nums text-ink-secondary">
               {page}/{pageCount}
             </span>
             <button
@@ -439,7 +439,7 @@ const BlueprintViewer = forwardRef<ViewerHandle, Props>(function BlueprintViewer
               onClick={() => setPage((p) => p + 1)}
               title="Next page"
             >
-              <ChevronRight size={15} />
+              <ChevronRight size={17} />
             </button>
           </>
         )}
@@ -448,7 +448,7 @@ const BlueprintViewer = forwardRef<ViewerHandle, Props>(function BlueprintViewer
       {/* select-mode hint */}
       {selectMode && (
         <div className="absolute left-1/2 top-14 z-20 flex -translate-x-1/2 items-center gap-2 rounded-lg border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs text-accent-bright shadow-pop backdrop-blur-md animate-fade-in">
-          <Crosshair size={13} />
+          <Crosshair size={15} />
           Drag a box around the correct value on the drawing
         </div>
       )}
@@ -504,7 +504,7 @@ const BlueprintViewer = forwardRef<ViewerHandle, Props>(function BlueprintViewer
           >
             <canvas
               ref={canvasRef}
-              className="block bg-white shadow-[0_0_0_1px_rgba(53,200,238,0.2),0_0_40px_-8px_rgba(53,200,238,0.15),0_24px_80px_-24px_rgba(0,0,0,0.9)]"
+              className="paper-shadow block bg-white"
               style={{ width: pageSize.w, height: pageSize.h }}
             />
             {rendering && (
@@ -572,7 +572,7 @@ const BlueprintViewer = forwardRef<ViewerHandle, Props>(function BlueprintViewer
                     {(active || hovered) && (
                       <span
                         className={cn(
-                          'absolute left-0 whitespace-nowrap rounded-sm px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.06em] text-white shadow-md',
+                          'absolute left-0 whitespace-nowrap rounded-sm px-1.5 py-0.5 font-mono text-[11.5px] font-medium uppercase tracking-[0.06em] text-white shadow-md',
                           tone.chip,
                         )}
                         style={{
@@ -635,8 +635,8 @@ const BlueprintViewer = forwardRef<ViewerHandle, Props>(function BlueprintViewer
       </div>
 
       {/* CAD status bar */}
-      <div className="flex h-7 shrink-0 items-center gap-4 border-t border-line bg-surface-1/90 px-3 font-mono text-[10px] tabular-nums text-ink-muted backdrop-blur-sm">
-        <span className="w-36 shrink-0">
+      <div className="flex h-8 shrink-0 items-center gap-4 border-t border-line bg-surface-1/90 px-3 font-mono text-[11.5px] tabular-nums text-ink-muted backdrop-blur-sm">
+        <span className="w-44 shrink-0">
           {inPage ? (
             <>
               <span className="text-ink-muted">X</span>{' '}

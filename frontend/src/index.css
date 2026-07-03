@@ -6,34 +6,96 @@
 @tailwind utilities;
 
 @layer base {
+  /* ---- theme tokens: light ("drafting room by day") ---------------------- */
+  :root {
+    --page: 241 244 250;
+    --surface-1: 255 255 255;
+    --surface-2: 245 248 252;
+    --surface-3: 231 237 246;
+    --line-rgb: 51 78 126;
+    --line-a: 0.14;
+    --line-a-strong: 0.26;
+    --ink: 26 38 62;
+    --ink-hi: 9 18 38;
+    --ink-secondary: 70 88 122;
+    --ink-muted: 122 137 165;
+    --accent: 7 141 178;
+    --accent-bright: 12 116 146;
+    --accent-deep: 8 95 122;
+    --accent-ink: 255 255 255;
+    --good: 13 138 88;
+    --warn: 168 112 8;
+    --crit: 200 56 56;
+
+    --shadow-card: 0 1px 2px rgba(20, 45, 90, 0.06), 0 10px 28px -14px rgba(20, 45, 90, 0.16);
+    --shadow-pop: 0 4px 14px rgba(20, 45, 90, 0.1), 0 20px 48px -16px rgba(20, 45, 90, 0.24);
+    --shadow-beam: 0 0 0 1px rgb(var(--accent) / 0.3), 0 4px 18px -4px rgb(var(--accent) / 0.35);
+    --shadow-beam-soft: 0 0 20px -6px rgb(var(--accent) / 0.35);
+
+    --paper-shadow: 0 0 0 1px rgba(20, 45, 90, 0.14), 0 18px 56px -20px rgba(20, 45, 90, 0.35);
+    --bg-glow-a: 0.07;
+    --bg-grid-a: 0.05;
+  }
+
+  /* ---- theme tokens: dark ("drafting room at night") --------------------- */
+  .dark {
+    --page: 4 7 12;
+    --surface-1: 8 13 22;
+    --surface-2: 13 21 34;
+    --surface-3: 20 31 49;
+    --line-rgb: 125 160 215;
+    --line-a: 0.12;
+    --line-a-strong: 0.22;
+    --ink: 230 238 250;
+    --ink-hi: 255 255 255;
+    --ink-secondary: 150 169 200;
+    --ink-muted: 84 103 138;
+    --accent: 53 200 238;
+    --accent-bright: 103 220 249;
+    --accent-deep: 21 150 188;
+    --accent-ink: 4 34 46;
+    --good: 47 208 138;
+    --warn: 245 185 62;
+    --crit: 242 100 90;
+
+    --shadow-card: 0 1px 0 rgba(125, 160, 215, 0.06) inset, 0 1px 2px rgba(0, 0, 0, 0.5), 0 12px 32px -16px rgba(0, 0, 0, 0.7);
+    --shadow-pop: 0 1px 0 rgba(125, 160, 215, 0.08) inset, 0 8px 24px rgba(0, 0, 0, 0.55), 0 24px 64px -16px rgba(0, 0, 0, 0.8);
+    --shadow-beam: 0 0 0 1px rgb(var(--accent) / 0.35), 0 4px 20px -4px rgb(var(--accent) / 0.45);
+    --shadow-beam-soft: 0 0 24px -6px rgb(var(--accent) / 0.35);
+
+    --paper-shadow: 0 0 0 1px rgb(var(--accent) / 0.2), 0 0 40px -8px rgb(var(--accent) / 0.15), 0 24px 80px -24px rgba(0, 0, 0, 0.9);
+    --bg-glow-a: 0.055;
+    --bg-grid-a: 0.033;
+  }
+
   html {
     @apply antialiased;
   }
   body {
-    @apply bg-page font-sans text-[13.5px] leading-normal text-ink;
+    @apply bg-page font-sans text-[15px] leading-normal text-ink;
     background-image:
-      radial-gradient(ellipse 1200px 700px at 18% -8%, rgba(53, 200, 238, 0.055), transparent 60%),
-      radial-gradient(ellipse 900px 600px at 100% 110%, rgba(53, 200, 238, 0.03), transparent 60%),
-      linear-gradient(rgba(93, 140, 210, 0.033) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(93, 140, 210, 0.033) 1px, transparent 1px);
+      radial-gradient(ellipse 1200px 700px at 18% -8%, rgb(var(--accent) / var(--bg-glow-a)), transparent 60%),
+      radial-gradient(ellipse 900px 600px at 100% 110%, rgb(var(--accent) / calc(var(--bg-glow-a) * 0.55)), transparent 60%),
+      linear-gradient(rgb(var(--line-rgb) / var(--bg-grid-a)) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(var(--line-rgb) / var(--bg-grid-a)) 1px, transparent 1px);
     background-size: 100% 100%, 100% 100%, 28px 28px, 28px 28px;
     background-attachment: fixed;
   }
   ::selection {
-    background: rgba(53, 200, 238, 0.28);
+    background: rgb(var(--accent) / 0.28);
   }
   ::-webkit-scrollbar {
     width: 9px;
     height: 9px;
   }
   ::-webkit-scrollbar-thumb {
-    background: rgba(125, 160, 215, 0.18);
+    background: rgb(var(--line-rgb) / 0.22);
     border-radius: 8px;
     border: 2px solid transparent;
     background-clip: content-box;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(53, 200, 238, 0.4);
+    background: rgb(var(--accent) / 0.4);
     border: 2px solid transparent;
     background-clip: content-box;
   }
@@ -51,11 +113,11 @@
       transition-colors focus:border-accent/60 focus:outline-none focus:ring-2 focus:ring-accent/20;
   }
   .label {
-    @apply mb-1.5 block font-mono text-[10px] font-medium uppercase tracking-label text-ink-muted;
+    @apply mb-1.5 block font-mono text-[11.5px] font-medium uppercase tracking-label text-ink-muted;
   }
   /* uppercase micro caption — the "title block lettering" of the system */
   .microlabel {
-    @apply font-mono text-[10px] font-medium uppercase tracking-label text-ink-muted;
+    @apply font-mono text-[11.5px] font-medium uppercase tracking-label text-ink-muted;
   }
   /* dimension-line section rule:  ├────────┤ */
   .dim-rule {
@@ -67,21 +129,26 @@
     @apply h-px flex-1 bg-line;
   }
   .dim-rule::before {
-    background: linear-gradient(90deg, transparent, rgba(125, 160, 215, 0.22));
+    background: linear-gradient(90deg, transparent, rgb(var(--line-rgb) / var(--line-a-strong)));
   }
   .dim-rule::after {
-    background: linear-gradient(90deg, rgba(125, 160, 215, 0.22), transparent);
+    background: linear-gradient(90deg, rgb(var(--line-rgb) / var(--line-a-strong)), transparent);
   }
 }
 
 /* fine blueprint grid for hero surfaces (dropzone, viewer) */
 .blueprint-grid {
   background-image:
-    linear-gradient(rgba(53, 200, 238, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(53, 200, 238, 0.06) 1px, transparent 1px),
-    linear-gradient(rgba(53, 200, 238, 0.028) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(53, 200, 238, 0.028) 1px, transparent 1px);
+    linear-gradient(rgb(var(--accent) / calc(var(--bg-grid-a) * 1.8)) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--accent) / calc(var(--bg-grid-a) * 1.8)) 1px, transparent 1px),
+    linear-gradient(rgb(var(--accent) / calc(var(--bg-grid-a) * 0.85)) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--accent) / calc(var(--bg-grid-a) * 0.85)) 1px, transparent 1px);
   background-size: 96px 96px, 96px 96px, 24px 24px, 24px 24px;
+}
+
+/* the rendered PDF sheet inside the viewer */
+.paper-shadow {
+  box-shadow: var(--paper-shadow);
 }
 
 /* registration corner marks (drawing-sheet corners) */
@@ -94,7 +161,7 @@
   position: absolute;
   width: 14px;
   height: 14px;
-  border-color: rgba(53, 200, 238, 0.4);
+  border-color: rgb(var(--accent) / 0.4);
   border-style: solid;
   pointer-events: none;
   transition: border-color 0.25s ease;
@@ -113,14 +180,14 @@
 .reg-corners-hover:hover::after,
 .reg-corners-active::before,
 .reg-corners-active::after {
-  border-color: rgba(53, 200, 238, 0.85);
+  border-color: rgb(var(--accent) / 0.85);
 }
 
 /* highlight pulse for the active bounding box */
 @keyframes bbox-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(53, 200, 238, 0.55); }
-  70% { box-shadow: 0 0 0 10px rgba(53, 200, 238, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(53, 200, 238, 0); }
+  0% { box-shadow: 0 0 0 0 rgb(var(--accent) / 0.55); }
+  70% { box-shadow: 0 0 0 10px rgb(var(--accent) / 0); }
+  100% { box-shadow: 0 0 0 0 rgb(var(--accent) / 0); }
 }
 .bbox-pulse {
   animation: bbox-pulse 1.2s ease-out 2;

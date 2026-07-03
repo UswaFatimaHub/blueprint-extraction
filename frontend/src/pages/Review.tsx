@@ -21,9 +21,10 @@ import {
   useProcessDocument,
   useSetFieldStatus,
 } from '../api/hooks'
+import { ApiError } from '../api/client'
 import type { BBox, DocumentDetail, ExtractedField } from '../api/types'
 import BlueprintViewer, { type ViewerHandle } from '../components/BlueprintViewer'
-import { Badge, Button, ConfidenceMeter, Input, Kbd, PageSpinner, ProgressRing, Textarea } from '../components/ui'
+import { Badge, BlueprintArt, Button, ConfidenceMeter, Input, Kbd, PageSpinner, ProgressRing, Textarea } from '../components/ui'
 import { cn, formatPct } from '../lib/utils'
 
 const CATEGORY_SUGGESTIONS = [
@@ -50,12 +51,12 @@ function PipelineProgress({ doc }: { doc: DocumentDetail }) {
     <div className="flex h-full flex-col items-center justify-center gap-10 p-6">
       {/* ghost sheet being scanned */}
       <div className="blueprint-grid reg-corners reg-corners-active relative h-40 w-64 overflow-hidden rounded-lg border border-accent/25 bg-surface-2/60">
-        <div className="absolute inset-x-6 top-7 h-1.5 rounded bg-line-strong/60" />
-        <div className="absolute left-6 top-12 h-1.5 w-24 rounded bg-line/80" />
-        <div className="absolute left-6 top-[66px] h-14 w-20 rounded border border-dashed border-line-strong/70" />
-        <div className="absolute right-6 top-[66px] h-1.5 w-16 rounded bg-line/80" />
-        <div className="absolute right-6 top-[82px] h-1.5 w-20 rounded bg-line/60" />
-        <div className="absolute bottom-6 inset-x-6 h-5 rounded border border-line-strong/70" />
+        <div className="absolute inset-x-6 top-7 h-1.5 rounded bg-line-strong" />
+        <div className="absolute left-6 top-12 h-1.5 w-24 rounded bg-line" />
+        <div className="absolute left-6 top-[66px] h-14 w-20 rounded border border-dashed border-line-strong" />
+        <div className="absolute right-6 top-[66px] h-1.5 w-16 rounded bg-line" />
+        <div className="absolute right-6 top-[82px] h-1.5 w-20 rounded bg-line" />
+        <div className="absolute bottom-6 inset-x-6 h-5 rounded border border-line-strong" />
         {/* scan beam */}
         <div className="absolute inset-x-0 h-10 animate-scan bg-gradient-to-b from-transparent via-accent/25 to-transparent">
           <div className="absolute inset-x-0 top-1/2 h-px bg-accent shadow-beam-soft" />
@@ -76,9 +77,9 @@ function PipelineProgress({ doc }: { doc: DocumentDetail }) {
                       : 'border-line-strong bg-surface-2 text-ink-muted',
                 )}
               >
-                {i < current ? <Check size={15} /> : i === current ? <Loader2 size={15} className="animate-spin" /> : i + 1}
+                {i < current ? <Check size={17} /> : i === current ? <Loader2 size={17} className="animate-spin" /> : i + 1}
               </div>
-              <span className={cn('microlabel text-center !text-[9px]', i <= current ? '!text-ink-secondary' : '')}>
+              <span className={cn('microlabel text-center !text-[11px]', i <= current ? '!text-ink-secondary' : '')}>
                 {s.label}
               </span>
             </div>
@@ -151,9 +152,9 @@ function FieldRow({
 
   const statusBadge =
     field.status === 'verified' ? (
-      <Badge tone="good"><Check size={11} /> Verified</Badge>
+      <Badge tone="good"><Check size={13} /> Verified</Badge>
     ) : field.status === 'corrected' ? (
-      <Badge tone="crit"><Pencil size={10} /> Corrected</Badge>
+      <Badge tone="crit"><Pencil size={12} /> Corrected</Badge>
     ) : (
       <Badge tone="warn">Review</Badge>
     )
@@ -176,24 +177,24 @@ function FieldRow({
     <div
       data-field-id={field.id}
       className={cn(
-        'group relative border-b border-line/70 transition-colors',
+        'group relative border-b border-line transition-colors',
         active ? 'bg-accent/[0.055]' : 'hover:bg-surface-2/50',
         correcting && 'bg-surface-2/70',
       )}
     >
       {/* status edge */}
       <span className={cn('absolute inset-y-0 left-0 w-[2.5px]', statusEdge[field.status])} />
-      {active && <span className="pointer-events-none absolute inset-0 shadow-[inset_0_0_0_1px_rgba(53,200,238,0.22)]" />}
+      {active && <span className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-accent/25" />}
 
       <div className="flex cursor-pointer items-center gap-3 py-2.5 pl-4 pr-3" onClick={() => onSelect(field)}>
-        <span className="w-5 shrink-0 font-mono text-[10px] tabular-nums text-ink-muted">
+        <span className="w-6 shrink-0 font-mono text-[11.5px] tabular-nums text-ink-muted">
           {String(index + 1).padStart(2, '0')}
         </span>
 
-        <div className="w-[104px] shrink-0">
-          <p className="text-[11.5px] font-medium leading-tight text-ink-secondary">{field.label}</p>
-          <p className={cn('mt-0.5 flex items-center gap-1 font-mono text-[9px] uppercase tracking-[0.06em]', match.className)}>
-            <Crosshair size={9} strokeWidth={2.2} />
+        <div className="w-[128px] shrink-0">
+          <p className="text-[13px] font-medium leading-tight text-ink-secondary">{field.label}</p>
+          <p className={cn('mt-0.5 flex items-center gap-1 font-mono text-[11px] uppercase tracking-[0.06em]', match.className)}>
+            <Crosshair size={11} strokeWidth={2.2} />
             {match.label}
           </p>
         </div>
@@ -202,20 +203,20 @@ function FieldRow({
           {field.value ? (
             <p
               className={cn(
-                'truncate font-mono text-[12.5px] tracking-tight',
+                'truncate font-mono text-[14px] tracking-tight',
                 field.status === 'corrected' ? 'text-crit/70 line-through decoration-crit/50' : 'text-ink',
               )}
             >
               {field.value}
             </p>
           ) : (
-            <p className="text-[12px] italic text-ink-muted">not found</p>
+            <p className="text-[13.5px] italic text-ink-muted">not found</p>
           )}
           {field.status === 'corrected' && field.corrected_value && (
-            <p className="truncate font-mono text-[12.5px] tracking-tight text-good">{field.corrected_value}</p>
+            <p className="truncate font-mono text-[14px] tracking-tight text-good">{field.corrected_value}</p>
           )}
           {sourceDiffers && (
-            <p className="mt-0.5 truncate text-[10.5px] text-ink-muted">
+            <p className="mt-0.5 truncate text-[12px] text-ink-muted">
               read as <span className="font-mono text-accent/80">“{field.source_text}”</span>
             </p>
           )}
@@ -224,11 +225,11 @@ function FieldRow({
         <div className="hidden shrink-0 xl:block">
           <ConfidenceMeter value={field.confidence} />
         </div>
-        <div className="w-[84px] shrink-0 text-right">{statusBadge}</div>
+        <div className="w-[100px] shrink-0 text-right">{statusBadge}</div>
 
         <div
           className={cn(
-            'flex w-[54px] shrink-0 items-center justify-end gap-0.5',
+            'flex w-[78px] shrink-0 items-center justify-end gap-0.5',
             field.status === 'unverified' ? 'opacity-100' : 'opacity-0 transition-opacity group-hover:opacity-100',
           )}
         >
@@ -236,35 +237,35 @@ function FieldRow({
             <>
               <button
                 title="Mark as correct (V)"
-                className="flex h-7 w-7 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-good/15 hover:text-good"
+                className="flex h-9 w-9 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-good/15 hover:text-good"
                 onClick={(e) => {
                   e.stopPropagation()
                   setStatus.mutate({ fieldId: field.id, status: 'verified' })
                 }}
               >
-                <Check size={15} />
+                <Check size={17} />
               </button>
               <button
                 title="Correct this value (C)"
-                className="flex h-7 w-7 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-crit/15 hover:text-crit"
+                className="flex h-9 w-9 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-crit/15 hover:text-crit"
                 onClick={(e) => {
                   e.stopPropagation()
                   onStartCorrection(field)
                 }}
               >
-                <Pencil size={13.5} />
+                <Pencil size={15.5} />
               </button>
             </>
           ) : (
             <button
               title="Reset to unreviewed"
-              className="flex h-7 w-7 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-3 hover:text-ink"
+              className="flex h-9 w-9 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-3 hover:text-ink"
               onClick={(e) => {
                 e.stopPropagation()
                 setStatus.mutate({ fieldId: field.id, status: 'unverified' })
               }}
             >
-              <Undo2 size={13.5} />
+              <Undo2 size={15.5} />
             </button>
           )}
         </div>
@@ -272,9 +273,9 @@ function FieldRow({
 
       {/* AI reasoning for the selected field */}
       {active && !correcting && (field.ai_reasoning || sourceDiffers) && (
-        <div className="flex items-start gap-2 border-t border-line/60 bg-surface-2/40 py-2.5 pl-4 pr-3.5 animate-fade-in">
-          <Sparkles size={12} className="mt-0.5 shrink-0 text-accent/80" />
-          <div className="min-w-0 text-[11.5px] leading-relaxed text-ink-secondary">
+        <div className="flex items-start gap-2 border-t border-line bg-surface-2/40 py-2.5 pl-4 pr-3.5 animate-fade-in">
+          <Sparkles size={14} className="mt-0.5 shrink-0 text-accent/80" />
+          <div className="min-w-0 text-[13px] leading-relaxed text-ink-secondary">
             {sourceDiffers && (
               <p>
                 Found <span className="font-mono text-accent-bright/90">“{field.source_text}”</span> printed on the
@@ -289,8 +290,8 @@ function FieldRow({
       {/* inline correction editor — the redline */}
       {correcting && (
         <div className="space-y-3 border-t border-crit/20 bg-surface-1 py-3 pl-4 pr-3.5 animate-fade-in">
-          <p className="microlabel flex items-center gap-1.5 !text-[9px] !text-crit/80">
-            <Pencil size={10} /> Redline correction
+          <p className="microlabel flex items-center gap-1.5 !text-[11px] !text-crit/80">
+            <Pencil size={12} /> Redline correction
           </p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
@@ -300,7 +301,7 @@ function FieldRow({
                 value={draft.value}
                 onChange={(e) => onDraftChange({ value: e.target.value })}
                 placeholder="Enter the value as it should read"
-                className="font-mono text-[12.5px]"
+                className="font-mono text-[14px]"
               />
             </div>
             <div>
@@ -333,17 +334,17 @@ function FieldRow({
               variant={draft.picking ? 'primary' : 'secondary'}
               onClick={() => onDraftChange({ picking: !draft.picking })}
             >
-              <Crosshair size={13} />
+              <Crosshair size={15} />
               {draft.picking ? 'Drag on the drawing…' : draft.region ? 'Re-mark location' : 'Mark location on drawing'}
             </Button>
             <div className="flex items-center gap-2">
               {draft.region && (
-                <span className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.08em] text-accent">
-                  <MapPin size={11} /> marked
+                <span className="flex items-center gap-1 font-mono text-[11.5px] uppercase tracking-[0.08em] text-accent">
+                  <MapPin size={13} /> marked
                 </span>
               )}
               <Button size="sm" variant="ghost" onClick={onCancelCorrection}>
-                <X size={13} /> Cancel
+                <X size={15} /> Cancel
               </Button>
               <Button
                 size="sm"
@@ -352,7 +353,7 @@ function FieldRow({
                 loading={createCorrection.isPending}
                 onClick={save}
               >
-                <Check size={13} /> Save correction
+                <Check size={15} /> Save correction
               </Button>
             </div>
           </div>
@@ -367,17 +368,42 @@ function FieldRow({
 function TitleBlockCell({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="flex min-w-0 flex-col justify-center border-l border-line px-3.5 first:border-l-0 first:pl-0">
-      <span className="microlabel !text-[8.5px]">{label}</span>
-      <span className={cn('mt-0.5 truncate text-[11.5px] text-ink-secondary', mono && 'font-mono tabular-nums')}>
+      <span className="microlabel !text-[10px]">{label}</span>
+      <span className={cn('mt-0.5 truncate text-[13px] text-ink-secondary', mono && 'font-mono tabular-nums')}>
         {value}
       </span>
     </div>
   )
 }
 
+function DocumentNotFound({ error }: { error: unknown }) {
+  const notFound = error instanceof ApiError && error.status === 404
+  return (
+    <div className="flex h-full items-center justify-center p-6">
+      <div className="card reg-corners reg-corners-active flex max-w-md flex-col items-center gap-3 px-10 py-12 text-center">
+        <BlueprintArt size={110} />
+        <p className="mt-2 font-mono text-[28px] font-semibold tracking-tight text-ink-hi">
+          {notFound ? '404' : 'Error'}
+        </p>
+        <p className="microlabel !text-[11.5px]">{notFound ? 'Sheet not on file' : 'Could not load sheet'}</p>
+        <p className="max-w-xs text-xs leading-relaxed text-ink-muted">
+          {notFound
+            ? 'No document with this ID exists in the drawing register — it may have been deleted.'
+            : String((error as Error)?.message ?? error)}
+        </p>
+        <Link to="/documents" className="mt-3">
+          <Button variant="primary" size="sm">
+            <ArrowLeft size={15} /> Back to documents
+          </Button>
+        </Link>
+      </div>
+    </div>
+  )
+}
+
 export default function Review() {
   const { id } = useParams<{ id: string }>()
-  const { data: doc, isLoading } = useDocument(id)
+  const { data: doc, isLoading, error } = useDocument(id)
   const processDoc = useProcessDocument()
   const setStatus = useSetFieldStatus(id ?? '')
 
@@ -474,6 +500,7 @@ export default function Review() {
     return () => window.removeEventListener('keydown', onKey)
   }, [fields, activeFieldId, correctingId, selectField, startCorrection, setStatus])
 
+  if (error) return <DocumentNotFound error={error} />
   if (isLoading || !doc) return <PageSpinner />
 
   const verifyAllRemaining = () => {
@@ -488,21 +515,21 @@ export default function Review() {
       <header className="flex items-center gap-3 border-b border-line bg-surface-1/80 px-3 py-2 backdrop-blur-sm sm:px-4">
         <Link
           to="/documents"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-surface-3 hover:text-ink"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-surface-3 hover:text-ink"
         >
-          <ArrowLeft size={16} />
+          <ArrowLeft size={18} />
         </Link>
 
         <div className="flex min-w-0 items-center gap-2.5">
-          <h1 className="truncate font-mono text-[15px] font-semibold tracking-tight text-white">
+          <h1 className="truncate font-mono text-[17px] font-semibold tracking-tight text-ink-hi">
             {doc.part_number ?? doc.filename}
           </h1>
           {fullyReviewed && (
-            <Badge tone="good"><CheckCheck size={11} /> Reviewed</Badge>
+            <Badge tone="good"><CheckCheck size={13} /> Reviewed</Badge>
           )}
         </div>
 
-        <div className="ml-2 hidden h-10 min-w-0 flex-1 items-stretch overflow-hidden rounded-lg border border-line bg-surface-2/40 px-3.5 md:flex">
+        <div className="ml-2 hidden h-11 min-w-0 flex-1 items-stretch overflow-hidden rounded-lg border border-line bg-surface-2/40 px-3.5 md:flex">
           <TitleBlockCell label="File" value={doc.filename} />
           <TitleBlockCell label="Part type" value={doc.part_type_name ?? '—'} />
           {doc.prompt_version_label && <TitleBlockCell label="Prompt rev" value={doc.prompt_version_label} mono />}
@@ -512,15 +539,15 @@ export default function Review() {
         <div className="ml-auto flex shrink-0 items-center gap-3">
           {doc.status === 'completed' && fields.length > 0 && (
             <div className="flex items-center gap-2" title={`${reviewed} of ${fields.length} fields reviewed`}>
-              <ProgressRing value={reviewed / fields.length} size={26} />
-              <span className="font-mono text-[11px] tabular-nums text-ink-secondary">
+              <ProgressRing value={reviewed / fields.length} size={32} />
+              <span className="font-mono text-[12.5px] tabular-nums text-ink-secondary">
                 {reviewed}/{fields.length}
               </span>
             </div>
           )}
           {doc.status === 'completed' && !fullyReviewed && fields.length > 0 && (
             <Button size="sm" variant="good" onClick={verifyAllRemaining}>
-              <CheckCheck size={13} /> Verify remaining
+              <CheckCheck size={15} /> Verify remaining
             </Button>
           )}
         </div>
@@ -536,12 +563,12 @@ export default function Review() {
           ) : doc.status === 'failed' ? (
             <div className="card flex h-full flex-col items-center justify-center gap-3 p-8">
               <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-crit/30 bg-crit/10 text-crit">
-                <AlertTriangle size={22} />
+                <AlertTriangle size={24} />
               </div>
               <p className="font-display text-sm font-semibold text-crit">Extraction failed</p>
               <p className="max-w-md text-center text-xs leading-relaxed text-ink-muted">{doc.error}</p>
               <Button variant="primary" size="sm" loading={processDoc.isPending} onClick={() => processDoc.mutate(doc.id)}>
-                <RotateCcw size={13} /> Retry extraction
+                <RotateCcw size={15} /> Retry extraction
               </Button>
             </div>
           ) : (
@@ -559,10 +586,10 @@ export default function Review() {
         </div>
 
         {/* specification panel */}
-        <div className="card flex min-h-0 w-full shrink-0 flex-col overflow-hidden lg:w-[500px] xl:w-[520px]">
+        <div className="card flex min-h-0 w-full shrink-0 flex-col overflow-hidden lg:w-[560px] xl:w-[620px]">
           <div className="flex items-center justify-between border-b border-line px-3.5 py-2.5">
-            <h2 className="microlabel !text-[10px] !text-ink-secondary">Extracted Specification</h2>
-            <div className="flex items-center gap-2.5 font-mono text-[9px] uppercase tracking-[0.08em] text-ink-muted">
+            <h2 className="microlabel !text-[11.5px] !text-ink-secondary">Extracted Specification</h2>
+            <div className="flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[0.08em] text-ink-muted">
               <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-warn" /> review</span>
               <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-good" /> verified</span>
               <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-crit" /> redlined</span>
@@ -595,16 +622,16 @@ export default function Review() {
 
           {doc.status === 'completed' && fields.length > 0 && (
             <div className="hidden items-center gap-3 border-t border-line bg-surface-2/40 px-3.5 py-2 lg:flex">
-              <span className="flex items-center gap-1.5 text-[10.5px] text-ink-muted">
+              <span className="flex items-center gap-1.5 text-[12px] text-ink-muted">
                 <Kbd>↑</Kbd><Kbd>↓</Kbd> navigate
               </span>
-              <span className="flex items-center gap-1.5 text-[10.5px] text-ink-muted">
+              <span className="flex items-center gap-1.5 text-[12px] text-ink-muted">
                 <Kbd>V</Kbd> verify
               </span>
-              <span className="flex items-center gap-1.5 text-[10.5px] text-ink-muted">
+              <span className="flex items-center gap-1.5 text-[12px] text-ink-muted">
                 <Kbd>C</Kbd> correct
               </span>
-              <span className="flex items-center gap-1.5 text-[10.5px] text-ink-muted">
+              <span className="flex items-center gap-1.5 text-[12px] text-ink-muted">
                 <Kbd>B</Kbd> boxes
               </span>
             </div>

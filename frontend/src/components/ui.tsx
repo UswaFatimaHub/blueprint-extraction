@@ -12,7 +12,7 @@ const buttonStyles: Record<ButtonVariant, string> = {
   primary:
     'bg-accent font-semibold text-accent-ink hover:bg-accent-bright shadow-beam-soft hover:shadow-beam active:translate-y-px',
   secondary:
-    'bg-surface-3/80 text-ink border border-line-strong hover:border-accent/40 hover:text-white active:translate-y-px',
+    'bg-surface-3/80 text-ink border border-line-strong hover:border-accent/40 hover:text-ink-hi active:translate-y-px',
   ghost: 'text-ink-secondary hover:text-ink hover:bg-surface-3/70',
   danger: 'bg-crit/10 text-crit border border-crit/30 hover:bg-crit/20 hover:border-crit/50',
   good: 'bg-good/10 text-good border border-good/30 hover:bg-good/20 hover:border-good/50',
@@ -37,14 +37,14 @@ export function Button({
         'inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition-all duration-150',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-page',
         'disabled:pointer-events-none disabled:opacity-40',
-        size === 'sm' ? 'h-7 px-2.5 text-xs' : 'h-9 px-3.5 text-[13px]',
+        size === 'sm' ? 'h-8 px-3 text-xs' : 'h-10 px-4 text-[15px]',
         buttonStyles[variant],
         className,
       )}
       disabled={disabled || loading}
       {...props}
     >
-      {loading && <Loader2 size={14} className="animate-spin" />}
+      {loading && <Loader2 size={16} className="animate-spin" />}
       {children}
     </button>
   )
@@ -74,7 +74,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.08em] leading-4',
+        'inline-flex items-center gap-1.5 rounded-md border px-1.5 py-0.5 font-mono text-[11.5px] font-medium uppercase tracking-[0.08em] leading-4',
         badgeStyles[tone],
         className,
       )}
@@ -101,7 +101,7 @@ export function PageHeader({
     <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
       <div className="min-w-0">
         <p className="microlabel text-accent/80">{eyebrow}</p>
-        <h1 className="mt-1 font-display text-[22px] font-semibold leading-7 tracking-tight text-white">{title}</h1>
+        <h1 className="mt-1 font-display text-[26px] font-semibold leading-7 tracking-tight text-ink-hi">{title}</h1>
         {subtitle && <p className="mt-1 max-w-2xl text-xs leading-relaxed text-ink-muted">{subtitle}</p>}
       </div>
       {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
@@ -136,14 +136,14 @@ export function Switch({
       aria-label={label}
       onClick={() => onChange(!checked)}
       className={cn(
-        'relative h-5 w-9 shrink-0 rounded-full transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60',
+        'relative h-6 w-11 shrink-0 rounded-full transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60',
         checked ? 'bg-accent shadow-beam-soft' : 'border border-line-strong bg-surface-3',
       )}
     >
       <span
         className={cn(
-          'absolute left-0 top-0.5 h-4 w-4 rounded-full shadow transition-transform duration-200',
-          checked ? 'translate-x-[18px] bg-accent-ink' : 'translate-x-0.5 bg-ink-secondary',
+          'absolute left-0 top-0.5 h-5 w-5 rounded-full shadow transition-transform duration-200',
+          checked ? 'translate-x-[22px] bg-accent-ink' : 'translate-x-0.5 bg-ink-secondary',
         )}
       />
     </button>
@@ -154,7 +154,7 @@ export function Switch({
 
 export function Kbd({ children }: { children: ReactNode }) {
   return (
-    <kbd className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded border border-line-strong bg-surface-2 px-1 font-mono text-[10px] font-medium text-ink-secondary shadow-[0_1px_0_rgba(0,0,0,0.4)]">
+    <kbd className="inline-flex h-[22px] min-w-[22px] items-center justify-center rounded border border-line-strong bg-surface-2 px-1.5 font-mono text-[12.5px] font-medium text-ink-secondary shadow-[0_1px_0_rgba(0,0,0,0.4)]">
       {children}
     </kbd>
   )
@@ -164,8 +164,8 @@ export function Kbd({ children }: { children: ReactNode }) {
 
 export function ProgressRing({
   value,
-  size = 26,
-  stroke = 2.5,
+  size = 30,
+  stroke = 3,
   className,
 }: {
   value: number // 0..1
@@ -178,13 +178,13 @@ export function ProgressRing({
   const done = value >= 1
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className={cn('-rotate-90', className)}>
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(125,160,215,0.15)" strokeWidth={stroke} />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" style={{ stroke: 'rgb(var(--line-rgb) / 0.18)' }} strokeWidth={stroke} />
       <circle
         cx={size / 2}
         cy={size / 2}
         r={r}
         fill="none"
-        stroke={done ? '#2FD08A' : '#35C8EE'}
+        style={{ stroke: done ? 'rgb(var(--good))' : 'rgb(var(--accent))' }}
         strokeWidth={stroke}
         strokeLinecap="round"
         strokeDasharray={c}
@@ -231,14 +231,14 @@ export function Modal({
       >
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
-            <h2 className="font-display text-[15px] font-semibold tracking-tight text-white">{title}</h2>
+            <h2 className="font-display text-[17px] font-semibold tracking-tight text-ink-hi">{title}</h2>
             {subtitle && <p className="mt-1 text-xs leading-relaxed text-ink-muted">{subtitle}</p>}
           </div>
           <button
             onClick={onClose}
             className="rounded-md p-1 text-ink-muted transition-colors hover:bg-surface-3 hover:text-ink"
           >
-            <X size={16} />
+            <X size={18} />
           </button>
         </div>
         {children}
@@ -254,22 +254,22 @@ export function Modal({
 export function BlueprintArt({ size = 96 }: { size?: number }) {
   return (
     <svg width={size} height={size * 0.72} viewBox="0 0 120 86" fill="none" className="opacity-80">
-      <g stroke="#35C8EE" strokeOpacity="0.55" strokeWidth="1.1" strokeDasharray="4 3">
+      <g className="stroke-accent" strokeOpacity="0.55" strokeWidth="1.1" strokeDasharray="4 3">
         <path d="M38 18 L60 8 L82 18 L82 42 L60 52 L38 42 Z" />
         <circle cx="60" cy="30" r="9" />
       </g>
-      <g stroke="#54678A" strokeWidth="0.8">
+      <g className="stroke-ink-muted" strokeWidth="0.8">
         <path d="M38 60 H82" />
         <path d="M38 56 v8 M82 56 v8" />
         <path d="M92 18 V42" />
         <path d="M88 18 h8 M88 42 h8" />
       </g>
-      <g fill="#54678A" fontFamily="'JetBrains Mono Variable', monospace" fontSize="6.5">
+      <g className="fill-ink-muted" fontFamily="'JetBrains Mono Variable', monospace" fontSize="6.5">
         <text x="53" y="70">44.00</text>
         <text x="97" y="32">24.0</text>
       </g>
-      <circle cx="60" cy="30" r="1.6" fill="#35C8EE" fillOpacity="0.8" />
-      <path d="M60 19 v22 M49 30 h22" stroke="#35C8EE" strokeOpacity="0.35" strokeWidth="0.7" />
+      <circle cx="60" cy="30" r="1.6" className="fill-accent" fillOpacity="0.8" />
+      <path d="M60 19 v22 M49 30 h22" className="stroke-accent" strokeOpacity="0.35" strokeWidth="0.7" />
     </svg>
   )
 }
@@ -325,10 +325,10 @@ export function ConfidenceMeter({ value }: { value: number | null }) {
   const tone = value >= 0.9 ? 'bg-good' : value >= 0.7 ? 'bg-warn' : 'bg-crit'
   return (
     <div className="flex items-center gap-2" title={`OCR confidence ${pct}%`}>
-      <div className="h-1 w-12 overflow-hidden rounded-full bg-surface-3">
+      <div className="h-1.5 w-12 overflow-hidden rounded-full bg-surface-3">
         <div className={cn('h-full rounded-full', tone)} style={{ width: `${pct}%` }} />
       </div>
-      <span className="w-8 font-mono text-[11px] tabular-nums text-ink-secondary">{pct}%</span>
+      <span className="w-9 font-mono text-[12.5px] tabular-nums text-ink-secondary">{pct}%</span>
     </div>
   )
 }

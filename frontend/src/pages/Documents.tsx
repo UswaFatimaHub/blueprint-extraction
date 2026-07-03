@@ -6,9 +6,11 @@ import {
   FileText,
   Loader2,
   Play,
+  Plus,
   RotateCcw,
   Trash2,
   UploadCloud,
+  X,
 } from 'lucide-react'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
@@ -38,25 +40,25 @@ function StatusBadge({ doc }: { doc: Document }) {
     case 'completed':
       return (
         <Badge tone="good">
-          <CheckCircle2 size={11} /> Completed
+          <CheckCircle2 size={13} /> Completed
         </Badge>
       )
     case 'failed':
       return (
         <Badge tone="crit">
-          <AlertTriangle size={11} /> Failed
+          <AlertTriangle size={13} /> Failed
         </Badge>
       )
     case 'processing':
       return (
         <Badge tone="accent">
-          <Loader2 size={11} className="animate-spin" /> {PHASE_LABEL[doc.phase] ?? 'Processing'}
+          <Loader2 size={13} className="animate-spin" /> {PHASE_LABEL[doc.phase] ?? 'Processing'}
         </Badge>
       )
     default:
       return (
         <Badge tone="neutral">
-          <Clock size={11} /> Queued
+          <Clock size={13} /> Queued
         </Badge>
       )
   }
@@ -74,7 +76,7 @@ function ReviewProgress({ doc }: { doc: Document }) {
           style={{ width: `${(reviewed / doc.fields_total) * 100}%` }}
         />
       </div>
-      <span className="font-mono text-[11px] tabular-nums text-ink-secondary">
+      <span className="font-mono text-[12.5px] tabular-nums text-ink-secondary">
         {reviewed}/{doc.fields_total}
       </span>
     </div>
@@ -85,8 +87,8 @@ function RegisterStat({ label, value, tone }: { label: string; value: number; to
   return (
     <div className="flex items-center gap-2">
       <span className={cn('led', tone ?? 'bg-ink-muted', value === 0 && 'opacity-30')} />
-      <span className="font-mono text-[12px] tabular-nums text-ink">{value}</span>
-      <span className="microlabel !text-[9px]">{label}</span>
+      <span className="font-mono text-[13.5px] tabular-nums text-ink">{value}</span>
+      <span className="microlabel !text-[11px]">{label}</span>
     </div>
   )
 }
@@ -103,19 +105,29 @@ export default function Documents() {
   const fileInput = useRef<HTMLInputElement>(null)
   const [dragOver, setDragOver] = useState(false)
   const [partTypeId, setPartTypeId] = useState<number | null>(null)
+  // selected files wait here for the user to confirm before the pipeline starts
+  const [staged, setStaged] = useState<File[]>([])
 
   const effectivePartType = partTypeId ?? partTypes?.[0]?.id ?? null
 
-  const onFiles = useCallback(
-    (list: FileList | File[]) => {
-      const files = Array.from(list).filter((f) =>
-        ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'].includes(f.type),
-      )
-      if (!files.length || !effectivePartType) return
-      upload.mutate({ files, partTypeId: effectivePartType })
-    },
-    [effectivePartType, upload],
-  )
+  const onFiles = useCallback((list: FileList | File[]) => {
+    const incoming = Array.from(list).filter((f) =>
+      ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'].includes(f.type),
+    )
+    if (!incoming.length) return
+    setStaged((prev) => {
+      const seen = new Set(prev.map((f) => `${f.name}|${f.size}|${f.lastModified}`))
+      return [...prev, ...incoming.filter((f) => !seen.has(`${f.name}|${f.size}|${f.lastModified}`))]
+    })
+  }, [])
+
+  const startExtraction = () => {
+    if (!staged.length || !effectivePartType) return
+    upload.mutate(
+      { files: staged, partTypeId: effectivePartType },
+      { onSuccess: () => setStaged([]) },
+    )
+  }
 
   const counts = useMemo(() => {
     const c = { queued: 0, processing: 0, completed: 0, failed: 0 }
@@ -132,7 +144,7 @@ export default function Documents() {
         actions={
           (counts.queued > 0 || counts.failed > 0) && (
             <Button variant="secondary" size="sm" loading={processPending.isPending} onClick={() => processPending.mutate()}>
-              <Play size={13} /> Process pending ({counts.queued + counts.failed})
+              <Play size={15} /> Process pending ({counts.queued + counts.failed})
             </Button>
           )
         }
@@ -165,53 +177,91 @@ export default function Documents() {
               height="calc(100% - 10px)"
               rx="10"
               fill="none"
-              stroke="#35C8EE"
+              className="animate-ants stroke-accent"
               strokeWidth="1.5"
               strokeDasharray="8 8"
-              className="animate-ants"
               opacity="0.8"
             />
           </svg>
         )}
 
-        <div className="relative">
-          {upload.isPending && <span className="absolute inset-0 rounded-2xl bg-accent/30 animate-pulse-ring" />}
-          <div
-            className={cn(
-              'relative flex h-14 w-14 items-center justify-center rounded-2xl border transition-all duration-200',
-              dragOver
-                ? 'border-accent/60 bg-accent/15 text-accent-bright shadow-beam-soft scale-110'
-                : 'border-accent/25 bg-accent/[0.07] text-accent',
-            )}
-          >
-            {upload.isPending ? <Loader2 size={24} className="animate-spin" /> : <UploadCloud size={24} strokeWidth={1.8} />}
-          </div>
-        </div>
+        {staged.length === 0 ? (
+          <>
+            <div
+              className={cn(
+                'relative flex h-14 w-14 items-center justify-center rounded-2xl border transition-all duration-200',
+                dragOver
+                  ? 'border-accent/60 bg-accent/15 text-accent-bright shadow-beam-soft scale-110'
+                  : 'border-accent/25 bg-accent/[0.07] text-accent',
+              )}
+            >
+              <UploadCloud size={26} strokeWidth={1.8} />
+            </div>
 
-        <div className="text-center">
-          <p className="font-display text-[15px] font-medium text-ink">
-            {upload.isPending ? 'Uploading…' : dragOver ? 'Release to upload' : 'Drop blueprints here'}
-          </p>
-          {!upload.isPending && !dragOver && (
-            <p className="mt-1 text-xs text-ink-muted">
-              or{' '}
-              <button
-                className="font-medium text-accent underline-offset-4 transition-colors hover:text-accent-bright hover:underline"
-                onClick={() => fileInput.current?.click()}
-              >
-                browse files
-              </button>{' '}
-              — PDF, PNG, JPG or WebP, multiple at once
-            </p>
-          )}
-        </div>
+            <div className="text-center">
+              <p className="font-display text-[17px] font-medium text-ink">
+                {dragOver ? 'Release to add files' : 'Drop blueprints here'}
+              </p>
+              {!dragOver && (
+                <p className="mt-1 text-xs text-ink-muted">
+                  or{' '}
+                  <button
+                    className="font-medium text-accent underline-offset-4 transition-colors hover:text-accent-bright hover:underline"
+                    onClick={() => fileInput.current?.click()}
+                  >
+                    browse files
+                  </button>{' '}
+                  — PDF, PNG, JPG or WebP, multiple at once. Nothing is processed until you confirm.
+                </p>
+              )}
+            </div>
+          </>
+        ) : (
+          /* review step — files wait here until the user starts the pipeline */
+          <div className="w-full max-w-lg space-y-4">
+            <div className="text-center">
+              <p className="font-display text-[17px] font-medium text-ink">
+                {staged.length} blueprint{staged.length === 1 ? '' : 's'} ready
+              </p>
+              <p className="mt-1 text-xs text-ink-muted">
+                Check the list — you can remove files or drop in more before starting.
+              </p>
+            </div>
+
+            <ul className="space-y-1.5">
+              {staged.map((f) => (
+                <li
+                  key={`${f.name}|${f.size}|${f.lastModified}`}
+                  className="flex items-center gap-3 rounded-lg border border-line bg-surface-2/70 py-2 pl-3 pr-1.5"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-accent/20 bg-accent/[0.07] text-accent">
+                    <FileText size={15} strokeWidth={1.8} />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-[14.5px] font-medium text-ink">{f.name}</span>
+                  <span className="shrink-0 font-mono text-[12.5px] tabular-nums text-ink-muted">
+                    {f.size >= 1048576 ? `${(f.size / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(f.size / 1024))} KB`}
+                  </span>
+                  <button
+                    title={`Remove ${f.name}`}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-crit/15 hover:text-crit"
+                    onClick={() => setStaged((prev) => prev.filter((s) => s !== f))}
+                    disabled={upload.isPending}
+                  >
+                    <X size={16} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <div className="flex items-center gap-2.5 rounded-full border border-line bg-surface-2/80 py-1 pl-3.5 pr-1.5 backdrop-blur-sm">
-          <span className="microlabel !text-[9px]">Part type</span>
+          <span className="microlabel !text-[11px]">Part type</span>
           <select
-            className="h-7 cursor-pointer rounded-full border-0 bg-surface-3 px-3 pr-7 text-xs font-medium text-ink outline-none transition-colors hover:bg-surface-3/70 focus:ring-2 focus:ring-accent/30"
+            className="h-8 cursor-pointer rounded-full border-0 bg-surface-3 px-3 pr-7 text-xs font-medium text-ink outline-none transition-colors hover:bg-surface-3/70 focus:ring-2 focus:ring-accent/30"
             value={effectivePartType ?? ''}
             onChange={(e) => setPartTypeId(Number(e.target.value))}
+            disabled={upload.isPending}
           >
             {partTypes?.map((pt) => (
               <option key={pt.id} value={pt.id}>
@@ -220,6 +270,20 @@ export default function Documents() {
             ))}
           </select>
         </div>
+
+        {staged.length > 0 && (
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <Button variant="primary" loading={upload.isPending} onClick={startExtraction}>
+              <Play size={15} /> Start extraction ({staged.length})
+            </Button>
+            <Button variant="secondary" disabled={upload.isPending} onClick={() => fileInput.current?.click()}>
+              <Plus size={15} /> Add more
+            </Button>
+            <Button variant="ghost" disabled={upload.isPending} onClick={() => setStaged([])}>
+              Clear
+            </Button>
+          </div>
+        )}
 
         <input
           ref={fileInput}
@@ -242,7 +306,7 @@ export default function Documents() {
           <RegisterStat label="Processing" value={counts.processing} tone="bg-accent animate-blink" />
           <RegisterStat label="Queued" value={counts.queued} tone="bg-ink-muted" />
           <RegisterStat label="Failed" value={counts.failed} tone="bg-crit" />
-          <span className="microlabel ml-auto hidden !text-[9px] sm:block">
+          <span className="microlabel ml-auto hidden !text-[11px] sm:block">
             {docs.length} sheet{docs.length === 1 ? '' : 's'} on file
           </span>
         </div>
@@ -264,12 +328,12 @@ export default function Documents() {
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-line">
-                  <th className="microlabel px-4 py-2.5 !text-[9px]">File</th>
-                  <th className="microlabel px-3 py-2.5 !text-[9px]">Part No.</th>
-                  <th className="microlabel px-3 py-2.5 !text-[9px]">Status</th>
-                  <th className="microlabel hidden px-3 py-2.5 !text-[9px] lg:table-cell">OCR Conf.</th>
-                  <th className="microlabel px-3 py-2.5 !text-[9px]">Reviewed</th>
-                  <th className="microlabel hidden px-3 py-2.5 !text-[9px] xl:table-cell">Uploaded</th>
+                  <th className="microlabel px-4 py-2.5 !text-[11px]">File</th>
+                  <th className="microlabel px-3 py-2.5 !text-[11px]">Part No.</th>
+                  <th className="microlabel px-3 py-2.5 !text-[11px]">Status</th>
+                  <th className="microlabel hidden px-3 py-2.5 !text-[11px] lg:table-cell">OCR Conf.</th>
+                  <th className="microlabel px-3 py-2.5 !text-[11px]">Reviewed</th>
+                  <th className="microlabel hidden px-3 py-2.5 !text-[11px] xl:table-cell">Uploaded</th>
                   <th className="px-3 py-2.5" />
                 </tr>
               </thead>
@@ -278,7 +342,7 @@ export default function Documents() {
                   <tr
                     key={doc.id}
                     className={cn(
-                      'group border-b border-line/60 transition-colors last:border-0',
+                      'group border-b border-line transition-colors last:border-0',
                       doc.status === 'completed' && 'cursor-pointer hover:bg-accent/[0.045]',
                     )}
                     onClick={() => doc.status === 'completed' && navigate(`/documents/${doc.id}`)}
@@ -287,23 +351,23 @@ export default function Documents() {
                       <div className="flex items-center gap-2.5">
                         <span
                           className={cn(
-                            'flex h-7 w-7 shrink-0 items-center justify-center rounded-md border transition-colors',
+                            'flex h-9 w-9 shrink-0 items-center justify-center rounded-md border transition-colors',
                             doc.status === 'completed'
                               ? 'border-accent/20 bg-accent/[0.07] text-accent group-hover:border-accent/40'
                               : 'border-line bg-surface-2 text-ink-muted',
                           )}
                         >
-                          <FileText size={13} strokeWidth={1.8} />
+                          <FileText size={15} strokeWidth={1.8} />
                         </span>
                         <div className="min-w-0">
-                          <p className="truncate text-[12.5px] font-medium text-ink">{doc.filename}</p>
+                          <p className="truncate text-[14px] font-medium text-ink">{doc.filename}</p>
                           {doc.status === 'failed' && doc.error ? (
-                            <p className="mt-0.5 max-w-[230px] truncate text-[10.5px] text-crit/80" title={doc.error}>
+                            <p className="mt-0.5 max-w-[230px] truncate text-[12px] text-crit/80" title={doc.error}>
                               {doc.error}
                             </p>
                           ) : (
                             doc.page_count != null && (
-                              <p className="mt-0.5 font-mono text-[10px] text-ink-muted">
+                              <p className="mt-0.5 font-mono text-[11.5px] text-ink-muted">
                                 {doc.page_count} page{doc.page_count === 1 ? '' : 's'}
                               </p>
                             )
@@ -311,19 +375,19 @@ export default function Documents() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-3 py-3 font-mono text-[12px] tracking-tight text-accent-bright/90">
+                    <td className="px-3 py-3 font-mono text-[13.5px] tracking-tight text-accent-bright/90">
                       {doc.part_number ?? <span className="text-ink-muted">—</span>}
                     </td>
                     <td className="px-3 py-3">
                       <StatusBadge doc={doc} />
                     </td>
-                    <td className="hidden px-3 py-3 font-mono text-[11.5px] tabular-nums text-ink-secondary lg:table-cell">
+                    <td className="hidden px-3 py-3 font-mono text-[13px] tabular-nums text-ink-secondary lg:table-cell">
                       {formatPct(doc.avg_confidence)}
                     </td>
                     <td className="px-3 py-3">
                       <ReviewProgress doc={doc} />
                     </td>
-                    <td className="hidden px-3 py-3 text-[11.5px] text-ink-muted xl:table-cell">
+                    <td className="hidden px-3 py-3 text-[13px] text-ink-muted xl:table-cell">
                       {formatDateTime(doc.created_at)}
                     </td>
                     <td className="px-3 py-3">
@@ -331,19 +395,19 @@ export default function Documents() {
                         {doc.status === 'failed' && (
                           <button
                             title="Retry"
-                            className="flex h-7 w-7 items-center justify-center rounded-md text-ink-muted hover:bg-surface-3 hover:text-ink"
+                            className="flex h-9 w-9 items-center justify-center rounded-md text-ink-muted hover:bg-surface-3 hover:text-ink"
                             onClick={(e) => {
                               e.stopPropagation()
                               processDoc.mutate(doc.id)
                             }}
                           >
-                            <RotateCcw size={13.5} />
+                            <RotateCcw size={15.5} />
                           </button>
                         )}
                         {doc.status !== 'processing' && (
                           <button
                             title="Delete"
-                            className="flex h-7 w-7 items-center justify-center rounded-md text-ink-muted hover:bg-crit/15 hover:text-crit"
+                            className="flex h-9 w-9 items-center justify-center rounded-md text-ink-muted hover:bg-crit/15 hover:text-crit"
                             onClick={(e) => {
                               e.stopPropagation()
                               if (confirm(`Delete ${doc.filename}? This removes its extraction and corrections.`)) {
@@ -351,17 +415,17 @@ export default function Documents() {
                               }
                             }}
                           >
-                            <Trash2 size={13.5} />
+                            <Trash2 size={15.5} />
                           </button>
                         )}
                         {doc.status === 'completed' && (
                           <Link
                             to={`/documents/${doc.id}`}
-                            className="flex h-7 w-7 items-center justify-center rounded-md text-ink-muted hover:bg-accent/15 hover:text-accent-bright"
+                            className="flex h-9 w-9 items-center justify-center rounded-md text-ink-muted hover:bg-accent/15 hover:text-accent-bright"
                             onClick={(e) => e.stopPropagation()}
                             title="Review"
                           >
-                            <ArrowRight size={14} />
+                            <ArrowRight size={16} />
                           </Link>
                         )}
                       </div>

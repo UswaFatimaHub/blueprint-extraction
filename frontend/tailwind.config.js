@@ -1,36 +1,43 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
+  darkMode: 'class',
   theme: {
     extend: {
+      // all colors resolve through CSS variables (RGB triples) set in index.css,
+      // so every component themes automatically — light on :root, dark on .dark
       colors: {
-        // "drafting room at night" canvas
-        page: '#04070C',
+        page: 'rgb(var(--page) / <alpha-value>)',
         surface: {
-          1: '#080D16',
-          2: '#0D1522',
-          3: '#141F31',
+          1: 'rgb(var(--surface-1) / <alpha-value>)',
+          2: 'rgb(var(--surface-2) / <alpha-value>)',
+          3: 'rgb(var(--surface-3) / <alpha-value>)',
         },
         line: {
-          faint: 'rgba(125,160,215,0.07)',
-          DEFAULT: 'rgba(125,160,215,0.12)',
-          strong: 'rgba(125,160,215,0.22)',
+          faint: 'rgb(var(--line-rgb) / 0.07)',
+          DEFAULT: 'rgb(var(--line-rgb) / var(--line-a))',
+          strong: 'rgb(var(--line-rgb) / var(--line-a-strong))',
         },
         ink: {
-          DEFAULT: '#E6EEFA',
-          secondary: '#96A9C8',
-          muted: '#54678A',
+          DEFAULT: 'rgb(var(--ink) / <alpha-value>)',
+          hi: 'rgb(var(--ink-hi) / <alpha-value>)',
+          secondary: 'rgb(var(--ink-secondary) / <alpha-value>)',
+          muted: 'rgb(var(--ink-muted) / <alpha-value>)',
         },
-        // cyan "blueprint beam"
         accent: {
-          DEFAULT: '#35C8EE',
-          bright: '#67DCF9',
-          deep: '#1596BC',
-          ink: '#04222E', // text on accent fills
+          DEFAULT: 'rgb(var(--accent) / <alpha-value>)',
+          bright: 'rgb(var(--accent-bright) / <alpha-value>)',
+          deep: 'rgb(var(--accent-deep) / <alpha-value>)',
+          ink: 'rgb(var(--accent-ink) / <alpha-value>)',
         },
-        good: '#2FD08A',
-        warn: '#F5B93E',
-        crit: '#F2645A', // redline
+        good: 'rgb(var(--good) / <alpha-value>)',
+        warn: 'rgb(var(--warn) / <alpha-value>)',
+        crit: 'rgb(var(--crit) / <alpha-value>)',
+      },
+      // enlarged type ramp — primary users are elderly; keep everything readable
+      fontSize: {
+        xs: ['13.5px', { lineHeight: '1.45' }],
+        sm: ['15.5px', { lineHeight: '1.5' }],
       },
       fontFamily: {
         display: ['"Space Grotesk Variable"', 'system-ui', 'sans-serif'],
@@ -38,10 +45,10 @@ export default {
         mono: ['"JetBrains Mono Variable"', 'ui-monospace', 'monospace'],
       },
       boxShadow: {
-        card: '0 1px 0 rgba(125,160,215,0.06) inset, 0 1px 2px rgba(0,0,0,0.5), 0 12px 32px -16px rgba(0,0,0,0.7)',
-        pop: '0 1px 0 rgba(125,160,215,0.08) inset, 0 8px 24px rgba(0,0,0,0.55), 0 24px 64px -16px rgba(0,0,0,0.8)',
-        beam: '0 0 0 1px rgba(53,200,238,0.35), 0 4px 20px -4px rgba(53,200,238,0.45)',
-        'beam-soft': '0 0 24px -6px rgba(53,200,238,0.35)',
+        card: 'var(--shadow-card)',
+        pop: 'var(--shadow-pop)',
+        beam: 'var(--shadow-beam)',
+        'beam-soft': 'var(--shadow-beam-soft)',
       },
       letterSpacing: {
         label: '0.14em',

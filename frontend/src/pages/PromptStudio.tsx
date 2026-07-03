@@ -25,7 +25,7 @@ export default function PromptStudio() {
         subtitle="The extraction prompt is assembled live from part-type fields, company standards and accumulated corrections."
         actions={
           <Button variant="primary" size="sm" onClick={() => { setNotes(''); setPublishOpen(true) }}>
-            <Rocket size={13} /> Publish version
+            <Rocket size={15} /> Publish version
           </Button>
         }
       />
@@ -36,7 +36,7 @@ export default function PromptStudio() {
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-2.5">
             <div className="flex items-center gap-2">
               <span className="led bg-accent animate-blink" />
-              <h2 className="microlabel !text-[10px] !text-ink-secondary">Live assembled prompt</h2>
+              <h2 className="microlabel !text-[11.5px] !text-ink-secondary">Live assembled prompt</h2>
               {versions?.[0] && <Badge tone="accent">next: v{versions[0].version_number + 1}.0</Badge>}
             </div>
             <div className="flex items-center gap-2">
@@ -52,21 +52,21 @@ export default function PromptStudio() {
               <div className="flex overflow-hidden rounded-lg border border-line-strong">
                 <button
                   className={cn(
-                    'flex items-center gap-1 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors',
+                    'flex items-center gap-1 px-2.5 py-1 font-mono text-[11.5px] uppercase tracking-[0.06em] transition-colors',
                     view === 'prompt' ? 'bg-accent/15 text-accent-bright' : 'text-ink-muted hover:text-ink',
                   )}
                   onClick={() => setView('prompt')}
                 >
-                  <FileText size={11} /> Prompt
+                  <FileText size={13} /> Prompt
                 </button>
                 <button
                   className={cn(
-                    'flex items-center gap-1 border-l border-line-strong px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors',
+                    'flex items-center gap-1 border-l border-line-strong px-2.5 py-1 font-mono text-[11.5px] uppercase tracking-[0.06em] transition-colors',
                     view === 'schema' ? 'bg-accent/15 text-accent-bright' : 'text-ink-muted hover:text-ink',
                   )}
                   onClick={() => setView('schema')}
                 >
-                  <Braces size={11} /> Schema
+                  <Braces size={13} /> Schema
                 </button>
               </div>
             </div>
@@ -74,18 +74,18 @@ export default function PromptStudio() {
           {isLoading || !preview ? (
             <PageSpinner />
           ) : (
-            <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap p-4 font-mono text-[11.5px] leading-relaxed text-ink-secondary xl:max-h-[calc(100vh-240px)]">
+            <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap p-4 font-mono text-[13px] leading-relaxed text-ink-secondary xl:max-h-[calc(100vh-240px)]">
               {view === 'prompt' ? preview.prompt_text : JSON.stringify(preview.page_schema, null, 2)}
             </pre>
           )}
         </div>
 
         {/* version history — a revision timeline */}
-        <div className="w-full shrink-0 xl:w-[330px]">
+        <div className="w-full shrink-0 xl:w-[360px]">
           <div className="card overflow-hidden">
             <div className="flex items-center gap-2 border-b border-line px-4 py-2.5">
-              <GitBranch size={13} className="text-accent/70" />
-              <h2 className="microlabel !text-[10px] !text-ink-secondary">Revision history</h2>
+              <GitBranch size={15} className="text-accent/70" />
+              <h2 className="microlabel !text-[11.5px] !text-ink-secondary">Revision history</h2>
             </div>
             <div className="max-h-[50vh] overflow-y-auto xl:max-h-[calc(100vh-240px)]">
               {versions?.map((v, i) => {
@@ -94,7 +94,7 @@ export default function PromptStudio() {
                   v.accuracy != null && prev?.accuracy != null ? v.accuracy - prev.accuracy : null
                 const isActive = i === 0
                 return (
-                  <div key={v.id} className="relative border-b border-line/60 py-3 pl-10 pr-4 last:border-0">
+                  <div key={v.id} className="relative border-b border-line py-3 pl-10 pr-4 last:border-0">
                     {/* timeline rail */}
                     <span className="absolute bottom-0 left-[19px] top-0 w-px bg-line" />
                     <span
@@ -107,12 +107,12 @@ export default function PromptStudio() {
                     />
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="font-mono text-[13px] font-semibold tracking-tight text-ink">{v.label}</span>
+                        <span className="font-mono text-[14.5px] font-semibold tracking-tight text-ink">{v.label}</span>
                         {isActive && <Badge tone="accent">active</Badge>}
                       </div>
-                      <span className="font-mono text-[10px] tabular-nums text-ink-muted">{formatDate(v.created_at)}</span>
+                      <span className="font-mono text-[11.5px] tabular-nums text-ink-muted">{formatDate(v.created_at)}</span>
                     </div>
-                    <div className="mt-1.5 flex items-center gap-3 text-[11.5px]">
+                    <div className="mt-1.5 flex items-center gap-3 text-[13px]">
                       <span
                         className={cn(
                           'font-mono font-semibold tabular-nums',
@@ -124,17 +124,17 @@ export default function PromptStudio() {
                       {delta != null && delta !== 0 && (
                         <span
                           className={cn(
-                            'flex items-center gap-0.5 font-mono text-[10.5px]',
+                            'flex items-center gap-0.5 font-mono text-[12px]',
                             delta > 0 ? 'text-good' : 'text-crit',
                           )}
                         >
-                          {delta > 0 ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+                          {delta > 0 ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
                           {delta > 0 ? '+' : ''}{(delta * 100).toFixed(1)}pt
                         </span>
                       )}
-                      <span className="ml-auto text-[10.5px] text-ink-muted">{v.fields_reviewed} reviewed</span>
+                      <span className="ml-auto text-[12px] text-ink-muted">{v.fields_reviewed} reviewed</span>
                     </div>
-                    {v.notes && <p className="mt-1.5 text-[11.5px] leading-relaxed text-ink-muted">{v.notes}</p>}
+                    {v.notes && <p className="mt-1.5 text-[13px] leading-relaxed text-ink-muted">{v.notes}</p>}
                   </div>
                 )
               })}
@@ -166,7 +166,7 @@ export default function PromptStudio() {
               loading={publish.isPending}
               onClick={() => publish.mutate({ notes }, { onSuccess: () => setPublishOpen(false) })}
             >
-              <Rocket size={13} /> Publish
+              <Rocket size={15} /> Publish
             </Button>
           </div>
         </div>

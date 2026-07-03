@@ -50,7 +50,7 @@ export default function Standards() {
         subtitle={`Formatting rules injected into every extraction prompt. ${activeCount} of ${rules?.length ?? 0} active.`}
         actions={
           <Button variant="primary" size="sm" onClick={() => { setForm(EMPTY); setModalOpen(true) }}>
-            <Plus size={13} /> Add rule
+            <Plus size={15} /> Add rule
           </Button>
         }
       />
@@ -72,20 +72,20 @@ export default function Standards() {
                 !r.active && 'opacity-45',
               )}
             >
-              <span className="mt-0.5 w-7 shrink-0 text-right font-mono text-[15px] font-medium tabular-nums text-accent/50">
+              <span className="mt-0.5 w-7 shrink-0 text-right font-mono text-[17px] font-medium tabular-nums text-accent/50">
                 {String(i + 1).padStart(2, '0')}
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <h3 className="font-display text-[13px] font-semibold tracking-tight text-ink">{r.title}</h3>
+                  <h3 className="font-display text-[14.5px] font-semibold tracking-tight text-ink">{r.title}</h3>
                   {!r.active && <Badge tone="neutral">disabled</Badge>}
                 </div>
-                <p className="mt-1.5 border-l-2 border-accent/25 pl-3 text-[12.5px] leading-relaxed text-ink-secondary">
+                <p className="mt-1.5 border-l-2 border-accent/25 pl-3 text-[14px] leading-relaxed text-ink-secondary">
                   {r.rule}
                 </p>
                 {r.context && (
-                  <p className="mt-2 flex items-start gap-1.5 text-[11.5px] leading-relaxed text-ink-muted">
-                    <Info size={11.5} className="mt-0.5 shrink-0" />
+                  <p className="mt-2 flex items-start gap-1.5 text-[13px] leading-relaxed text-ink-muted">
+                    <Info size={13.5} className="mt-0.5 shrink-0" />
                     {r.context}
                   </p>
                 )}
@@ -93,19 +93,19 @@ export default function Standards() {
               <div className="flex shrink-0 items-center gap-1.5">
                 <button
                   onClick={() => openEdit(r)}
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-ink-muted opacity-0 transition-all hover:bg-surface-3 hover:text-ink group-hover:opacity-100"
+                  className="flex h-9 w-9 items-center justify-center rounded-md text-ink-muted opacity-0 transition-all hover:bg-surface-3 hover:text-ink group-hover:opacity-100"
                   title="Edit rule"
                 >
-                  <Pencil size={13} />
+                  <Pencil size={15} />
                 </button>
                 <button
                   onClick={() => {
                     if (confirm(`Delete rule "${r.title}"?`)) deleteStandard.mutate(r.id)
                   }}
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-ink-muted opacity-0 transition-all hover:bg-crit/15 hover:text-crit group-hover:opacity-100"
+                  className="flex h-9 w-9 items-center justify-center rounded-md text-ink-muted opacity-0 transition-all hover:bg-crit/15 hover:text-crit group-hover:opacity-100"
                   title="Delete rule"
                 >
-                  <Trash2 size={13} />
+                  <Trash2 size={15} />
                 </button>
                 <Switch
                   checked={r.active}

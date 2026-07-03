@@ -14,11 +14,31 @@ import {
 
 import { useDashboard } from '../api/hooks'
 import { Badge, EmptyState, PageHeader, PageSpinner } from '../components/ui'
+import { useTheme } from '../lib/theme'
 import { formatDateTime, formatPct } from '../lib/utils'
 
-const SERIES = '#35C8EE'
-const INK_MUTED = '#54678A'
-const GRID = 'rgba(125,160,215,0.08)'
+// recharts writes colors into SVG presentation attributes, where CSS var()
+// isn't supported — so charts pick a palette from the active theme in JS
+const CHART_COLORS = {
+  dark: {
+    series: '#35C8EE',
+    axis: '#54678A',
+    axisStrong: '#96A9C8',
+    grid: 'rgba(125,160,215,0.08)',
+    cursor: 'rgba(53,200,238,0.35)',
+    cursorFill: 'rgba(53,200,238,0.05)',
+    dotFill: '#080D16',
+  },
+  light: {
+    series: '#078DB2',
+    axis: '#7A89A5',
+    axisStrong: '#46587A',
+    grid: 'rgba(51,78,126,0.10)',
+    cursor: 'rgba(7,141,178,0.4)',
+    cursorFill: 'rgba(7,141,178,0.06)',
+    dotFill: '#FFFFFF',
+  },
+}
 
 function StatTile({
   icon,
@@ -34,9 +54,9 @@ function StatTile({
   return (
     <div className="card group relative overflow-hidden p-4 transition-colors hover:border-accent/25">
       <div className="absolute right-3 top-3 text-ink-muted/50 transition-colors group-hover:text-accent/60">{icon}</div>
-      <p className="microlabel !text-[9px]">{label}</p>
-      <p className="mt-2 font-mono text-[26px] font-semibold leading-8 tracking-tight text-white">{value}</p>
-      {hint && <p className="mt-1 truncate text-[11px] text-ink-muted">{hint}</p>}
+      <p className="microlabel !text-[11px]">{label}</p>
+      <p className="mt-2 font-mono text-[30px] font-semibold leading-8 tracking-tight text-ink-hi">{value}</p>
+      {hint && <p className="mt-1 truncate text-[12.5px] text-ink-muted">{hint}</p>}
     </div>
   )
 }
@@ -48,7 +68,7 @@ function ChartTooltip({ active, payload, label, formatter }: any) {
       <p className="font-mono font-medium text-ink">{label}</p>
       {payload.map((p: any, i: number) => (
         <p key={i} className="mt-1 flex items-center gap-1.5 text-ink-secondary">
-          <span className="h-2 w-2 rounded-sm" style={{ background: SERIES }} />
+          <span className="h-2 w-2 rounded-sm bg-accent" />
           {formatter ? formatter(p.value, p.payload) : p.value}
         </p>
       ))}
@@ -67,8 +87,8 @@ function ChartCard({
 }) {
   return (
     <div className="card p-4">
-      <h2 className="font-display text-[13px] font-semibold tracking-tight text-ink">{title}</h2>
-      <p className="mt-0.5 text-[11px] text-ink-muted">{subtitle}</p>
+      <h2 className="font-display text-[14.5px] font-semibold tracking-tight text-ink">{title}</h2>
+      <p className="mt-0.5 text-[12.5px] text-ink-muted">{subtitle}</p>
       {children}
     </div>
   )
@@ -76,8 +96,10 @@ function ChartCard({
 
 export default function Dashboard() {
   const { data, isLoading } = useDashboard()
+  const { theme } = useTheme()
   if (isLoading || !data) return <PageSpinner />
 
+  const C = CHART_COLORS[theme]
   const { stats, error_patterns, version_accuracy, recent_corrections } = data
   const accuracySeries = version_accuracy.filter((v) => v.accuracy != null)
 
@@ -92,25 +114,25 @@ export default function Dashboard() {
       {/* KPI row */}
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <StatTile
-          icon={<Target size={15} />}
+          icon={<Target size={17} />}
           label="Extraction accuracy"
           value={formatPct(stats.overall_accuracy, 1)}
           hint={`${stats.fields_verified} verified · ${stats.fields_corrected} corrected`}
         />
         <StatTile
-          icon={<FileCheck2 size={15} />}
+          icon={<FileCheck2 size={17} />}
           label="Documents processed"
           value={String(stats.documents_completed)}
           hint={stats.documents_failed ? `${stats.documents_failed} failed` : 'all succeeded'}
         />
         <StatTile
-          icon={<ListChecks size={15} />}
+          icon={<ListChecks size={17} />}
           label="Fields extracted"
           value={String(stats.fields_total)}
           hint={`${stats.fields_unverified} awaiting review`}
         />
         <StatTile
-          icon={<PencilRuler size={15} />}
+          icon={<PencilRuler size={17} />}
           label="Corrections logged"
           value={String(stats.corrections_total)}
           hint="each one improves the prompt"
@@ -133,21 +155,21 @@ export default function Dashboard() {
                 <AreaChart data={accuracySeries} margin={{ top: 8, right: 12, bottom: 0, left: -18 }}>
                   <defs>
                     <linearGradient id="accuracyFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={SERIES} stopOpacity={0.28} />
-                      <stop offset="100%" stopColor={SERIES} stopOpacity={0.02} />
+                      <stop offset="0%" stopColor={C.series} stopOpacity={0.28} />
+                      <stop offset="100%" stopColor={C.series} stopOpacity={0.02} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid stroke={GRID} vertical={false} />
+                  <CartesianGrid stroke={C.grid} vertical={false} />
                   <XAxis
                     dataKey="label"
-                    tick={{ fill: INK_MUTED, fontSize: 11, fontFamily: 'JetBrains Mono Variable' }}
+                    tick={{ fill: C.axis, fontSize: 13, fontFamily: 'JetBrains Mono Variable' }}
                     axisLine={false}
                     tickLine={false}
                   />
                   <YAxis
                     domain={[0, 1]}
                     tickFormatter={(v) => `${Math.round(v * 100)}%`}
-                    tick={{ fill: INK_MUTED, fontSize: 11, fontFamily: 'JetBrains Mono Variable' }}
+                    tick={{ fill: C.axis, fontSize: 13, fontFamily: 'JetBrains Mono Variable' }}
                     axisLine={false}
                     tickLine={false}
                     width={58}
@@ -160,16 +182,16 @@ export default function Dashboard() {
                         }
                       />
                     }
-                    cursor={{ stroke: 'rgba(53,200,238,0.35)', strokeDasharray: '3 3' }}
+                    cursor={{ stroke: C.cursor, strokeDasharray: '3 3' }}
                   />
                   <Area
                     type="monotone"
                     dataKey="accuracy"
-                    stroke={SERIES}
+                    stroke={C.series}
                     strokeWidth={2}
                     fill="url(#accuracyFill)"
-                    dot={{ r: 3.5, fill: '#080D16', stroke: SERIES, strokeWidth: 1.8 }}
-                    activeDot={{ r: 5, fill: SERIES, stroke: '#080D16', strokeWidth: 2 }}
+                    dot={{ r: 3.5, fill: C.dotFill, stroke: C.series, strokeWidth: 1.8 }}
+                    activeDot={{ r: 5, fill: C.series, stroke: C.dotFill, strokeWidth: 2 }}
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -196,15 +218,15 @@ export default function Dashboard() {
                 >
                   <defs>
                     <linearGradient id="barFill" x1="0" y1="0" x2="1" y2="0">
-                      <stop offset="0%" stopColor={SERIES} stopOpacity={0.5} />
-                      <stop offset="100%" stopColor={SERIES} stopOpacity={0.95} />
+                      <stop offset="0%" stopColor={C.series} stopOpacity={0.5} />
+                      <stop offset="100%" stopColor={C.series} stopOpacity={0.95} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid stroke={GRID} horizontal={false} />
+                  <CartesianGrid stroke={C.grid} horizontal={false} />
                   <XAxis
                     type="number"
                     allowDecimals={false}
-                    tick={{ fill: INK_MUTED, fontSize: 11, fontFamily: 'JetBrains Mono Variable' }}
+                    tick={{ fill: C.axis, fontSize: 13, fontFamily: 'JetBrains Mono Variable' }}
                     axisLine={false}
                     tickLine={false}
                   />
@@ -212,7 +234,7 @@ export default function Dashboard() {
                     type="category"
                     dataKey="field_label"
                     width={110}
-                    tick={{ fill: '#96A9C8', fontSize: 11 }}
+                    tick={{ fill: C.axisStrong, fontSize: 11 }}
                     axisLine={false}
                     tickLine={false}
                   />
@@ -224,7 +246,7 @@ export default function Dashboard() {
                         }
                       />
                     }
-                    cursor={{ fill: 'rgba(53,200,238,0.05)' }}
+                    cursor={{ fill: C.cursorFill }}
                   />
                   <Bar dataKey="count" fill="url(#barFill)" barSize={13} radius={[0, 4, 4, 0]} />
                 </BarChart>
@@ -237,9 +259,9 @@ export default function Dashboard() {
       {/* correction log */}
       <div className="card overflow-hidden">
         <div className="flex items-center gap-2 border-b border-line px-4 py-2.5">
-          <BookOpenCheck size={14} className="text-accent/70" />
-          <h2 className="font-display text-[13px] font-semibold tracking-tight text-ink">Correction log</h2>
-          <span className="hidden text-[11px] text-ink-muted sm:inline">— the raw training signal for prompt improvements</span>
+          <BookOpenCheck size={16} className="text-accent/70" />
+          <h2 className="font-display text-[14.5px] font-semibold tracking-tight text-ink">Correction log</h2>
+          <span className="hidden text-[12.5px] text-ink-muted sm:inline">— the raw training signal for prompt improvements</span>
         </div>
         {recent_corrections.length === 0 ? (
           <EmptyState art title="No corrections yet">
@@ -251,34 +273,34 @@ export default function Dashboard() {
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-line">
-                  <th className="microlabel px-4 py-2 !text-[9px]">Field</th>
-                  <th className="microlabel px-3 py-2 !text-[9px]">AI read</th>
+                  <th className="microlabel px-4 py-2 !text-[11px]">Field</th>
+                  <th className="microlabel px-3 py-2 !text-[11px]">AI read</th>
                   <th className="px-1 py-2" />
-                  <th className="microlabel px-3 py-2 !text-[9px]">Corrected to</th>
-                  <th className="microlabel px-3 py-2 !text-[9px]">Why</th>
-                  <th className="microlabel hidden px-3 py-2 !text-[9px] lg:table-cell">Document</th>
-                  <th className="microlabel hidden px-3 py-2 !text-[9px] xl:table-cell">When</th>
+                  <th className="microlabel px-3 py-2 !text-[11px]">Corrected to</th>
+                  <th className="microlabel px-3 py-2 !text-[11px]">Why</th>
+                  <th className="microlabel hidden px-3 py-2 !text-[11px] lg:table-cell">Document</th>
+                  <th className="microlabel hidden px-3 py-2 !text-[11px] xl:table-cell">When</th>
                 </tr>
               </thead>
               <tbody>
                 {recent_corrections.map((c) => (
-                  <tr key={c.id} className="border-b border-line/60 align-top transition-colors last:border-0 hover:bg-surface-2/40">
+                  <tr key={c.id} className="border-b border-line align-top transition-colors last:border-0 hover:bg-surface-2/40">
                     <td className="px-4 py-2.5">
-                      <p className="text-[12px] font-medium text-ink">{c.field_label}</p>
+                      <p className="text-[13.5px] font-medium text-ink">{c.field_label}</p>
                       {c.category && <Badge tone="neutral" className="mt-1">{c.category}</Badge>}
                     </td>
-                    <td className="px-3 py-2.5 font-mono text-[11.5px] text-crit/75 line-through decoration-crit/40">
+                    <td className="px-3 py-2.5 font-mono text-[13px] text-crit/75 line-through decoration-crit/40">
                       {c.original_value ?? '—'}
                     </td>
                     <td className="px-1 py-3 text-ink-muted">
-                      <ArrowRight size={11} />
+                      <ArrowRight size={13} />
                     </td>
-                    <td className="px-3 py-2.5 font-mono text-[11.5px] text-good">{c.corrected_value}</td>
-                    <td className="max-w-[280px] px-3 py-2.5 text-[11.5px] leading-relaxed text-ink-secondary">
+                    <td className="px-3 py-2.5 font-mono text-[13px] text-good">{c.corrected_value}</td>
+                    <td className="max-w-[280px] px-3 py-2.5 text-[13px] leading-relaxed text-ink-secondary">
                       {c.reason || <span className="text-ink-muted">—</span>}
                     </td>
-                    <td className="hidden px-3 py-2.5 text-[11.5px] text-ink-muted lg:table-cell">{c.document_name}</td>
-                    <td className="hidden whitespace-nowrap px-3 py-2.5 font-mono text-[10.5px] tabular-nums text-ink-muted xl:table-cell">
+                    <td className="hidden px-3 py-2.5 text-[13px] text-ink-muted lg:table-cell">{c.document_name}</td>
+                    <td className="hidden whitespace-nowrap px-3 py-2.5 font-mono text-[12px] tabular-nums text-ink-muted xl:table-cell">
                       {formatDateTime(c.created_at)}
                     </td>
                   </tr>

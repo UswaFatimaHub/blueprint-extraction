@@ -484,6 +484,15 @@ def parse_extraction_values(extract_payload: dict) -> dict:
     return raw if isinstance(raw, dict) else {}
 
 
+# Datalab's balanced-mode verifier ends every agreeing reasoning with
+# "Conclusion: <value>, which agrees with the extraction." — pure boilerplate
+# that restates the value. Strip it; a *disagreeing* conclusion is kept.
+_AGREE_CONCLUSION = re.compile(
+    r"\s*Conclusion:.*?which agrees with the extraction\.?\s*$",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
 def _field_meta(values: dict, key: str) -> str | None:
     """Surface balanced-mode reasoning/verification for the UI."""
     meta = values.get(f"{key}_meta")
@@ -491,8 +500,10 @@ def _field_meta(values: dict, key: str) -> str | None:
         return None
     parts = []
     reasoning = meta.get("reasoning")
-    if isinstance(reasoning, str) and reasoning.strip():
-        parts.append(reasoning.strip())
+    if isinstance(reasoning, str):
+        reasoning = _AGREE_CONCLUSION.sub("", reasoning).strip()
+        if reasoning:
+            parts.append(reasoning)
     status = meta.get("extraction_status")
     verification = meta.get("verification")
     v_status = verification.get("status") if isinstance(verification, dict) else None
