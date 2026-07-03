@@ -468,6 +468,62 @@ def merge_field(
     )
 
 
+def _xywh_overlap(a: dict, b: dict) -> bool:
+    return not (
+        a["x"] + a["w"] < b["x"] or b["x"] + b["w"] < a["x"]
+        or a["y"] + a["h"] < b["y"] or b["y"] + b["h"] < a["y"]
+    )
+
+
+def _occurrence_boxes(
+    value: str,
+    source_text: str | None,
+    citations: list[str],
+    html_blocks: dict[str, BlockInfo],
+    json_blocks: dict[str, BlockInfo],
+    pages: dict[int, PageInfo],
+) -> list[dict]:
+    """One box per cited block — every place the extractor saw the value.
+
+    Tries a tight word-level match inside each block (source text first, since
+    that's what is physically printed), falling back to the block region.
+    """
+    occs: list[dict] = []
+    seen: set[str] = set()
+    for cited in citations:
+        block = _resolve_block(str(cited), html_blocks, json_blocks)
+        if block is None or block.id in seen:
+            continue
+        seen.add(block.id)
+        if not block.words and block.id in html_blocks:
+            block = html_blocks[block.id]
+
+        best_words: list[Word] = []
+        best_score = 0.0
+        for needle in (source_text, value):
+            if not needle:
+                continue
+            words, score = find_best_window(needle, block.words)
+            if score > best_score:
+                best_words, best_score = words, score
+        if best_score >= WORD_THRESHOLD and best_words:
+            bbox = _union_bbox([w.bbox for w in best_words])
+            norm = _normalize_bbox(bbox, pages.get(best_words[0].page))
+            if norm:
+                occs.append({"page": best_words[0].page, "x": norm[0], "y": norm[1], "w": norm[2], "h": norm[3], "q": "word"})
+                continue
+
+        region = _norm_block_bbox(block, pages)
+        if region is not None and block.page is not None:
+            occs.append({
+                "page": block.page,
+                "x": region[0], "y": region[1],
+                "w": region[2] - region[0], "h": region[3] - region[1],
+                "q": "block",
+            })
+    return occs
+
+
 # ---------------------------------------------------------------------------
 # Extraction payload parsing
 # ---------------------------------------------------------------------------
@@ -484,13 +540,28 @@ def parse_extraction_values(extract_payload: dict) -> dict:
     return raw if isinstance(raw, dict) else {}
 
 
-# Datalab's balanced-mode verifier ends every agreeing reasoning with
-# "Conclusion: <value>, which agrees with the extraction." — pure boilerplate
-# that restates the value. Strip it; a *disagreeing* conclusion is kept.
+# Datalab's balanced-mode verifier appends boilerplate to reasoning/feedback:
+# an agreeing "Conclusion: <value>, which agrees with the extraction." and/or a
+# trailing "PASS:\nConclusion: …" block. A passing conclusion only restates the
+# value, so both are stripped; FAIL/WARN conclusions carry signal and are kept.
 _AGREE_CONCLUSION = re.compile(
     r"\s*Conclusion:.*?which agrees with the extraction\.?\s*$",
     re.IGNORECASE | re.DOTALL,
 )
+# the agree-wording for empty fields
+_NULL_CONCLUSION = re.compile(
+    r"\s*Conclusion:\s*the document does not support a value for this field\.?\s*$",
+    re.IGNORECASE,
+)
+_PASS_TRAILER = re.compile(r"\s*\bPASS:?\s*(?:Conclusion:.*)?$", re.DOTALL)
+
+
+def _clean_verifier_text(text: str) -> str:
+    """Strip Datalab verifier boilerplate from reasoning/feedback strings."""
+    text = _AGREE_CONCLUSION.sub("", text)
+    text = _NULL_CONCLUSION.sub("", text)
+    text = _PASS_TRAILER.sub("", text)
+    return text.strip()
 
 
 def _field_meta(values: dict, key: str) -> str | None:
@@ -501,7 +572,7 @@ def _field_meta(values: dict, key: str) -> str | None:
     parts = []
     reasoning = meta.get("reasoning")
     if isinstance(reasoning, str):
-        reasoning = _AGREE_CONCLUSION.sub("", reasoning).strip()
+        reasoning = _clean_verifier_text(reasoning)
         if reasoning:
             parts.append(reasoning)
     status = meta.get("extraction_status")
@@ -512,8 +583,10 @@ def _field_meta(values: dict, key: str) -> str | None:
     elif v_status and v_status != "PASS":
         parts.append(f"Datalab verification: {v_status} — verify this value carefully.")
     feedback = verification.get("feedback") if isinstance(verification, dict) else None
-    if isinstance(feedback, str) and feedback.strip():
-        parts.append(feedback.strip())
+    if isinstance(feedback, str):
+        feedback = _clean_verifier_text(feedback)
+        if feedback:
+            parts.append(feedback)
     return " ".join(parts) if parts else None
 
 
@@ -549,7 +622,7 @@ def merge_extraction(
             results[key] = {
                 "value": None, "source_text": source_text, "page": None, "bbox": None,
                 "confidence": None, "match_quality": "none", "block_ids": [],
-                "reasoning": _field_meta(values, key),
+                "locations": [], "reasoning": _field_meta(values, key),
             }
             continue
 
@@ -573,6 +646,19 @@ def merge_extraction(
             else:
                 box = value_box
 
+        # every occurrence of the value on the document, primary location first
+        locations: list[dict] = []
+        if box.x is not None:
+            primary = {"page": box.page, "x": box.x, "y": box.y, "w": box.w, "h": box.h, "q": box.match_quality}
+            locations.append(primary)
+            all_citations = citations + [c for c in source_citations if c not in citations]
+            for occ in _occurrence_boxes(value_str, source_text, all_citations, html_blocks, json_blocks, pages):
+                duplicate = any(
+                    occ["page"] == known["page"] and _xywh_overlap(occ, known) for known in locations
+                )
+                if not duplicate:
+                    locations.append(occ)
+
         results[key] = {
             "value": value_str,
             "source_text": source_text,
@@ -581,6 +667,7 @@ def merge_extraction(
             "confidence": box.confidence,
             "match_quality": box.match_quality,
             "block_ids": box.block_ids,
+            "locations": locations,
             "reasoning": _field_meta(values, key),
         }
     return results

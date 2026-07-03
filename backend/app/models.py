@@ -128,6 +128,8 @@ class ExtractedField(Base):
     bbox_y: Mapped[float | None] = mapped_column(Float, nullable=True)
     bbox_w: Mapped[float | None] = mapped_column(Float, nullable=True)
     bbox_h: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # every occurrence of the value on the document, primary first: [{page,x,y,w,h,q}]
+    locations: Mapped[list] = mapped_column(JSON, default=list)
     block_ids: Mapped[list] = mapped_column(JSON, default=list)
     # word | line | block | none — how precisely the bbox was matched
     match_quality: Mapped[str] = mapped_column(String(10), default="none")

@@ -108,6 +108,15 @@ class CorrectionOut(ORMModel):
 
 # ---- Extracted fields -----------------------------------------------------
 
+class FieldLocation(BaseModel):
+    page: int
+    x: float
+    y: float
+    w: float
+    h: float
+    q: str = "block"
+
+
 class ExtractedFieldOut(ORMModel):
     id: int
     field_key: str
@@ -119,6 +128,7 @@ class ExtractedFieldOut(ORMModel):
     bbox_y: float | None
     bbox_w: float | None
     bbox_h: float | None
+    locations: list[FieldLocation] = []
     match_quality: str
     source_text: str | None
     ai_reasoning: str | None

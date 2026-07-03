@@ -162,6 +162,7 @@ def process_document(document_id: str) -> None:
                 page=m.get("page"),
                 bbox_x=bbox.get("x"), bbox_y=bbox.get("y"),
                 bbox_w=bbox.get("w"), bbox_h=bbox.get("h"),
+                locations=m.get("locations") or [],
                 block_ids=m.get("block_ids") or [],
                 match_quality=m.get("match_quality") or "none",
                 source_text=m.get("source_text"),

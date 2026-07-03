@@ -41,6 +41,7 @@ export interface ViewerHandle {
   zoomToField: (field: ExtractedField) => void
   zoomToBBox: (bbox: BBox, page: number) => void
   toggleBoxes: () => void
+  fitPage: () => void
 }
 
 /** rotate page-space point about origin by r degrees */
@@ -79,10 +80,12 @@ interface Props {
   selectMode: boolean
   onRegionSelect: (bbox: BBox) => void
   selectedRegion: BBox | null
+  /** transient highlight for a non-primary occurrence of the active field */
+  ghostRegion?: BBox | null
 }
 
 const BlueprintViewer = forwardRef<ViewerHandle, Props>(function BlueprintViewer(
-  { fileUrl, fields, activeFieldId, onFieldClick, selectMode, onRegionSelect, selectedRegion },
+  { fileUrl, fields, activeFieldId, onFieldClick, selectMode, onRegionSelect, selectedRegion, ghostRegion },
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -92,7 +95,9 @@ const BlueprintViewer = forwardRef<ViewerHandle, Props>(function BlueprintViewer
   const [pdf, setPdf] = useState<pdfjs.PDFDocumentProxy | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState<{ w: number; h: number } | null>(null)
+  // page is the 1-based page whose geometry this is — pages can differ in size
+  // (e.g. mixed /Rotate), so consumers must wait for matching geometry
+  const [pageSize, setPageSize] = useState<{ w: number; h: number; page: number } | null>(null)
   const [view, setView] = useState<View>({ s: 1, tx: 0, ty: 0, r: 0 })
   const [animate, setAnimate] = useState(false)
   const [rendering, setRendering] = useState(true)
@@ -137,7 +142,9 @@ const BlueprintViewer = forwardRef<ViewerHandle, Props>(function BlueprintViewer
         if (cancelled) return
         const vp1 = p.getViewport({ scale: 1 })
         setPageSize((prev) =>
-          prev && prev.w === vp1.width && prev.h === vp1.height ? prev : { w: vp1.width, h: vp1.height },
+          prev && prev.w === vp1.width && prev.h === vp1.height && prev.page === page
+            ? prev
+            : { w: vp1.width, h: vp1.height, page },
         )
         const dpr = window.devicePixelRatio || 1
         const vp = p.getViewport({ scale: renderScale * dpr })
@@ -186,18 +193,19 @@ const BlueprintViewer = forwardRef<ViewerHandle, Props>(function BlueprintViewer
     setView({ s, tx, ty, r })
   }, [])
 
-  // refit when page geometry first becomes known or page changes
+  // once the CURRENT page's geometry is known: execute the pending zoom for it,
+  // otherwise refit. Waiting for matching geometry matters — pages can differ in
+  // size, and zooming/fitting against the previous page's dimensions puts the
+  // view in the wrong place (and a late refit would clobber a pending zoom).
   useEffect(() => {
-    if (pageSize) fitView(viewRef.current.r, false)
-  }, [pageSize, page, fitView])
-
-  // execute pending zoom-to-bbox once the right page is mounted
-  useEffect(() => {
-    if (!pendingZoom.current || !pageSize) return
-    const { bbox, page: targetPage } = pendingZoom.current
-    if (targetPage !== page - 1) return
-    pendingZoom.current = null
-    zoomToBBoxInternal(bbox)
+    if (!pageSize || pageSize.page !== page) return
+    const pending = pendingZoom.current
+    if (pending && pending.page === page - 1) {
+      pendingZoom.current = null
+      zoomToBBoxInternal(pending.bbox)
+    } else {
+      fitView(viewRef.current.r, false)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageSize, page])
 
@@ -243,6 +251,7 @@ const BlueprintViewer = forwardRef<ViewerHandle, Props>(function BlueprintViewer
       )
     },
     toggleBoxes: () => setShowBoxes((v) => !v),
+    fitPage: () => fitView(viewRef.current.r, true),
   }))
 
   // ---- adaptive render quality ---------------------------------------------------
@@ -591,6 +600,22 @@ const BlueprintViewer = forwardRef<ViewerHandle, Props>(function BlueprintViewer
                   </div>
                 )
               })}
+
+            {/* alternate occurrence of the active field */}
+            {ghostRegion && ghostRegion.page === page - 1 && (
+              <div
+                className="absolute"
+                style={{
+                  left: ghostRegion.x * pageSize.w,
+                  top: ghostRegion.y * pageSize.h,
+                  width: ghostRegion.w * pageSize.w,
+                  height: ghostRegion.h * pageSize.h,
+                  border: `${Math.max(1.8 / view.s, 0.6)}px dashed ${SELECT_CYAN}`,
+                  background: 'rgba(8,145,178,0.1)',
+                  borderRadius: 3 / view.s,
+                }}
+              />
+            )}
 
             {/* saved corrected-location region */}
             {selectedRegion && selectedRegion.page === page - 1 && (

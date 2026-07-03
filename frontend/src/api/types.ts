@@ -30,6 +30,15 @@ export interface Correction {
   created_at: string
 }
 
+export interface FieldLocation {
+  page: number
+  x: number
+  y: number
+  w: number
+  h: number
+  q: string
+}
+
 export interface ExtractedField {
   id: number
   field_key: string
@@ -41,6 +50,8 @@ export interface ExtractedField {
   bbox_y: number | null
   bbox_w: number | null
   bbox_h: number | null
+  /** every occurrence of the value on the document, primary first */
+  locations?: FieldLocation[]
   match_quality: MatchQuality
   source_text: string | null
   ai_reasoning: string | null

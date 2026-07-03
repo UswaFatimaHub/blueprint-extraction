@@ -3,6 +3,8 @@ import {
   ArrowLeft,
   Check,
   CheckCheck,
+  ChevronLeft,
+  ChevronRight,
   Crosshair,
   Loader2,
   MapPin,
@@ -22,7 +24,7 @@ import {
   useSetFieldStatus,
 } from '../api/hooks'
 import { ApiError } from '../api/client'
-import type { BBox, DocumentDetail, ExtractedField } from '../api/types'
+import type { BBox, DocumentDetail, ExtractedField, FieldLocation } from '../api/types'
 import BlueprintViewer, { type ViewerHandle } from '../components/BlueprintViewer'
 import { Badge, BlueprintArt, Button, ConfidenceMeter, Input, Kbd, PageSpinner, ProgressRing, Textarea } from '../components/ui'
 import { cn, formatPct } from '../lib/utils'
@@ -110,6 +112,27 @@ const statusEdge: Record<string, string> = {
   corrected: 'bg-crit/70',
 }
 
+/** every place the value occurs, primary first — falls back to the single bbox for
+    documents processed before multi-location support */
+const fieldLocations = (f: ExtractedField): FieldLocation[] => {
+  if (f.locations?.length) return f.locations
+  if (f.bbox_x != null && f.page != null) {
+    return [{ page: f.page, x: f.bbox_x, y: f.bbox_y!, w: f.bbox_w!, h: f.bbox_h!, q: f.match_quality }]
+  }
+  return []
+}
+
+/** review-priority dot by OCR confidence (unverified fields only) */
+function PriorityIcon({ confidence }: { confidence: number | null }) {
+  const tier =
+    confidence == null || confidence < 0.4
+      ? { color: 'bg-crit', label: 'High priority — low confidence' }
+      : confidence <= 0.75
+        ? { color: 'bg-warn', label: 'Medium priority' }
+        : { color: 'bg-accent', label: 'Low priority — likely correct' }
+  return <span className={cn('led shrink-0', tier.color)} title={tier.label} aria-label={tier.label} />
+}
+
 const matchGlyph: Record<string, { label: string; className: string }> = {
   word: { label: 'exact match', className: 'text-good/90' },
   line: { label: 'drawing match', className: 'text-good/70' },
@@ -128,6 +151,8 @@ function FieldRow({
   onCancelCorrection,
   draft,
   onDraftChange,
+  occIndex,
+  onOccurrenceNav,
 }: {
   field: ExtractedField
   index: number
@@ -139,6 +164,8 @@ function FieldRow({
   onCancelCorrection: () => void
   draft: CorrectionDraft
   onDraftChange: (d: Partial<CorrectionDraft>) => void
+  occIndex: number
+  onOccurrenceNav: (dir: -1 | 1) => void
 }) {
   const setStatus = useSetFieldStatus(documentId)
   const createCorrection = useCreateCorrection(documentId)
@@ -149,6 +176,7 @@ function FieldRow({
     field.source_text.replace(/\W+/g, '').toLowerCase() !== field.value.replace(/\W+/g, '').toLowerCase()
 
   const match = matchGlyph[field.match_quality] ?? matchGlyph.none
+  const locations = fieldLocations(field)
 
   const statusBadge =
     field.status === 'verified' ? (
@@ -156,7 +184,7 @@ function FieldRow({
     ) : field.status === 'corrected' ? (
       <Badge tone="crit"><Pencil size={12} /> Corrected</Badge>
     ) : (
-      <Badge tone="warn">Review</Badge>
+      <Badge tone="warn"><PriorityIcon confidence={field.confidence} /> Review</Badge>
     )
 
   const save = () => {
@@ -197,6 +225,31 @@ function FieldRow({
             <Crosshair size={11} strokeWidth={2.2} />
             {match.label}
           </p>
+          {/* value appears in several places — step through the occurrences */}
+          {active && locations.length > 1 && (
+            <div
+              className="mt-1 inline-flex items-center gap-0.5 rounded-md border border-accent/30 bg-accent/[0.07] px-0.5"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                title="Previous occurrence"
+                className="flex h-6 w-6 items-center justify-center rounded text-accent-bright transition-colors hover:bg-accent/15"
+                onClick={() => onOccurrenceNav(-1)}
+              >
+                <ChevronLeft size={14} />
+              </button>
+              <span className="font-mono text-[11px] tabular-nums text-accent-bright" title="Occurrence on the drawing">
+                {occIndex + 1}/{locations.length}
+              </span>
+              <button
+                title="Next occurrence"
+                className="flex h-6 w-6 items-center justify-center rounded text-accent-bright transition-colors hover:bg-accent/15"
+                onClick={() => onOccurrenceNav(1)}
+              >
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="min-w-0 flex-1">
@@ -409,29 +462,60 @@ export default function Review() {
 
   const viewerRef = useRef<ViewerHandle>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  const autoSelected = useRef(false)
   const [activeFieldId, setActiveFieldId] = useState<number | null>(null)
   const [correctingId, setCorrectingId] = useState<number | null>(null)
+  // which occurrence of the active field's value is being viewed
+  const [occIndex, setOccIndex] = useState(0)
   const [draft, setDraft] = useState<CorrectionDraft>({ value: '', reason: '', category: '', region: null, picking: false })
 
   const fields = useMemo(() => doc?.fields ?? [], [doc])
   const reviewed = fields.filter((f) => f.status !== 'unverified').length
   const fullyReviewed = fields.length > 0 && reviewed === fields.length
 
-  // auto-select first located field once loaded
+  // auto-select first located field once loaded (only once — the user may deselect)
   useEffect(() => {
-    if (doc?.status === 'completed' && activeFieldId === null && fields.length) {
+    if (!autoSelected.current && doc?.status === 'completed' && fields.length) {
+      autoSelected.current = true
       const first = fields.find((f) => f.bbox_x != null) ?? fields[0]
       setActiveFieldId(first.id)
     }
-  }, [doc?.status, fields, activeFieldId])
+  }, [doc?.status, fields])
 
-  const selectField = useCallback((f: ExtractedField) => {
-    setActiveFieldId(f.id)
-    if (f.bbox_x != null) viewerRef.current?.zoomToField(f)
-  }, [])
+  const selectField = useCallback(
+    (f: ExtractedField) => {
+      // clicking the already-selected field deselects it and zooms back out
+      if (f.id === activeFieldId) {
+        setActiveFieldId(null)
+        setOccIndex(0)
+        viewerRef.current?.fitPage()
+        return
+      }
+      setActiveFieldId(f.id)
+      setOccIndex(0)
+      const loc = fieldLocations(f)[0]
+      if (loc) viewerRef.current?.zoomToBBox({ x: loc.x, y: loc.y, w: loc.w, h: loc.h }, loc.page)
+    },
+    [activeFieldId],
+  )
+
+  const goToOccurrence = useCallback(
+    (dir: -1 | 1) => {
+      const f = fields.find((x) => x.id === activeFieldId)
+      if (!f) return
+      const locs = fieldLocations(f)
+      if (locs.length < 2) return
+      const next = (occIndex + dir + locs.length) % locs.length
+      setOccIndex(next)
+      const loc = locs[next]
+      viewerRef.current?.zoomToBBox({ x: loc.x, y: loc.y, w: loc.w, h: loc.h }, loc.page)
+    },
+    [fields, activeFieldId, occIndex],
+  )
 
   const startCorrection = useCallback((f: ExtractedField) => {
     setActiveFieldId(f.id)
+    setOccIndex(0)
     setCorrectingId(f.id)
     setDraft({ value: f.value ?? '', reason: '', category: '', region: null, picking: false })
     if (f.bbox_x != null) viewerRef.current?.zoomToField(f)
@@ -463,14 +547,14 @@ export default function Review() {
         case 'j': {
           e.preventDefault()
           const next = fields[Math.min(fields.length - 1, idx + 1)] ?? fields[0]
-          selectField(next)
+          if (next.id !== activeFieldId) selectField(next)
           break
         }
         case 'ArrowUp':
         case 'k': {
           e.preventDefault()
           const prev = fields[Math.max(0, idx - 1)] ?? fields[0]
-          selectField(prev)
+          if (prev.id !== activeFieldId) selectField(prev)
           break
         }
         case 'v': {
@@ -508,6 +592,14 @@ export default function Review() {
       setStatus.mutate({ fieldId: f.id, status: 'verified' }),
     )
   }
+
+  // dashed highlight at the alternate occurrence currently being viewed
+  const activeField = fields.find((f) => f.id === activeFieldId)
+  const activeLoc = activeField ? fieldLocations(activeField)[occIndex] : undefined
+  const ghostRegion: BBox | null =
+    occIndex > 0 && activeLoc
+      ? { x: activeLoc.x, y: activeLoc.y, w: activeLoc.w, h: activeLoc.h, page: activeLoc.page }
+      : null
 
   return (
     <div className="flex h-full flex-col">
@@ -580,6 +672,7 @@ export default function Review() {
               onFieldClick={selectField}
               selectMode={correctingId != null && draft.picking}
               selectedRegion={correctingId != null ? draft.region : null}
+              ghostRegion={ghostRegion}
               onRegionSelect={(bbox) => setDraft((d) => ({ ...d, region: bbox, picking: false }))}
             />
           )}
@@ -615,6 +708,8 @@ export default function Review() {
                   onCancelCorrection={() => setCorrectingId(null)}
                   draft={draft}
                   onDraftChange={(d) => setDraft((prev) => ({ ...prev, ...d }))}
+                  occIndex={f.id === activeFieldId ? occIndex : 0}
+                  onOccurrenceNav={goToOccurrence}
                 />
               ))
             )}
