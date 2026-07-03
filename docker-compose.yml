@@ -1,0 +1,24 @@
+services:
+  api:
+    build: ./backend
+    environment:
+      DATA_DIR: /data
+      DATALAB_API_KEY: ${DATALAB_API_KEY:-}
+      DATALAB_MODE: ${DATALAB_MODE:-auto}
+      EXTRACTION_MODE: ${EXTRACTION_MODE:-balanced}
+    volumes:
+      - app-data:/data
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  web:
+    build: ./frontend
+    depends_on:
+      - api
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+
+volumes:
+  app-data:

@@ -1,0 +1,66 @@
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/jetbrains-mono';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply antialiased;
+  }
+  body {
+    @apply bg-page text-ink font-sans text-[13.5px] leading-normal;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.22);
+    border-radius: 8px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(148, 163, 184, 0.38);
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-line bg-surface-1 shadow-card;
+  }
+  .input {
+    @apply w-full rounded-lg border border-line-strong bg-surface-2 px-3 py-2 text-ink placeholder:text-ink-muted
+      focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25 transition-colors;
+  }
+  .label {
+    @apply mb-1.5 block text-xs font-medium uppercase tracking-wider text-ink-muted;
+  }
+}
+
+/* blueprint grid backdrop for the viewer */
+.blueprint-grid {
+  background-image:
+    linear-gradient(rgba(57, 135, 229, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(57, 135, 229, 0.055) 1px, transparent 1px),
+    linear-gradient(rgba(57, 135, 229, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(57, 135, 229, 0.03) 1px, transparent 1px);
+  background-size: 96px 96px, 96px 96px, 24px 24px, 24px 24px;
+}
+
+/* highlight pulse for the active bounding box */
+@keyframes bbox-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(57, 135, 229, 0.55); }
+  70% { box-shadow: 0 0 0 10px rgba(57, 135, 229, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(57, 135, 229, 0); }
+}
+.bbox-pulse {
+  animation: bbox-pulse 1.2s ease-out 2;
+}
