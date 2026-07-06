@@ -53,4 +53,4 @@ export const api = {
   delete: (path: string) => fetch(`${BASE}${path}`, { method: 'DELETE' }).then((r) => handle<void>(r)),
 }
 
-export { ApiError }
+export { ApiError, BASE }

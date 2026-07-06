@@ -23,7 +23,7 @@ import {
   useProcessDocument,
   useSetFieldStatus,
 } from '../api/hooks'
-import { ApiError } from '../api/client'
+import { ApiError, BASE } from '../api/client'
 import type { BBox, DocumentDetail, ExtractedField, FieldLocation } from '../api/types'
 import BlueprintViewer, { type ViewerHandle } from '../components/BlueprintViewer'
 import { Badge, BlueprintArt, Button, ConfidenceMeter, Input, Kbd, PageSpinner, ProgressRing, Textarea } from '../components/ui'
@@ -667,7 +667,7 @@ export default function Review() {
           ) : (
             <BlueprintViewer
               ref={viewerRef}
-              fileUrl={`/api/documents/${doc.id}/file`}
+              fileUrl={`${BASE}/api/documents/${doc.id}/file`}
               fields={fields}
               activeFieldId={activeFieldId}
               onFieldClick={selectField}
