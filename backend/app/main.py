@@ -43,7 +43,7 @@ def health():
 
 
 def _run_migrations():
-    """Additive column migrations for existing SQLite databases (create_all
+    """Additive column migrations for existing databases (create_all
     only creates missing tables, never missing columns)."""
     from sqlalchemy import text
 

@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     extraction_mode: str = "balanced"
 
     data_dir: Path = Path("data-store")
+    # compose overrides this to point at the db service; the default targets
+    # the system Postgres (port 5433 on this machine) so local (non-docker)
+    # backend runs work with docker fully stopped
+    database_url: str = "postgresql+psycopg://blueprint:blueprint@localhost:5433/blueprint_local"
     poll_interval: float = 2.0
     poll_timeout: float = 900.0
     pipeline_workers: int = 2
@@ -31,10 +35,6 @@ class Settings(BaseSettings):
     @property
     def artifacts_dir(self) -> Path:
         return self.data_dir / "artifacts"
-
-    @property
-    def db_path(self) -> Path:
-        return self.data_dir / "app.db"
 
 
 settings = Settings()

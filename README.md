@@ -29,7 +29,7 @@ The core value proposition: instead of a human reading each blueprint and typing
 
 ## Architecture
 
-Two Docker services plus one external dependency (Datalab). Everything else — database, file storage, queue — is local.
+Three Docker services plus one external dependency (Datalab). Everything else — database, file storage, queue — is local.
 
 ```
                 ┌─────────────────────────────────────────────┐
@@ -42,9 +42,14 @@ Two Docker services plus one external dependency (Datalab). Everything else — 
                 │  api (FastAPI + Uvicorn :8000)              │
                 │  • REST API (documents, fields, config…)    │
                 │  • pipeline worker threads (in-process)     │
-                │  • SQLite + uploads + artifacts on volume   │
-                └───────────────────┬─────────────────────────┘
-                                    │ HTTPS (only external call)
+                │  • uploads + artifacts on volume            │
+                └─────────┬─────────────────┬─────────────────┘
+                          │                 │
+                ┌─────────▼───────────┐     │
+                │  db (Postgres 16)   │     │
+                │  host port :5434    │     │
+                └─────────────────────┘     │
+                                            │ HTTPS (only external call)
                 ┌───────────────────▼─────────────────────────┐
                 │  Datalab API (www.datalab.to)               │
                 │  /convert   OCR + layout + word bboxes      │
@@ -55,7 +60,7 @@ Two Docker services plus one external dependency (Datalab). Everything else — 
 
 **Frontend** — React 18 + TypeScript + Vite + Tailwind. pdf.js renders each PDF page to a canvas (required for bounding-box overlays — no iframes). TanStack Query handles data fetching/polling; Recharts powers the dashboard.
 
-**Backend** — FastAPI + SQLAlchemy + SQLite. Synchronous endpoints, a small thread pool for pipeline work, and httpx for Datalab calls.
+**Backend** — FastAPI + SQLAlchemy + PostgreSQL. Synchronous endpoints, a small thread pool for pipeline work, and httpx for Datalab calls.
 
 ### The extraction pipeline (per document)
 
@@ -88,7 +93,7 @@ Raw payloads for every run are saved under `/data/artifacts/<document-id>/` (`oc
 
 ```
 blueprint-POC/
-├── docker-compose.yml          # api + web services, app-data volume
+├── docker-compose.yml          # db + api + web services, app-data & db-data volumes
 ├── .env.example                # copy to .env, add DATALAB_API_KEY
 ├── functional-requirements.md  # original spec
 ├── data/
@@ -100,7 +105,7 @@ blueprint-POC/
 │   └── app/
 │       ├── main.py             # FastAPI app, CORS, startup (create tables, seed, start workers)
 │       ├── config.py           # env-driven settings (pydantic-settings)
-│       ├── database.py         # SQLite engine (WAL mode), session factory
+│       ├── database.py         # Postgres engine (from DATABASE_URL), session factory
 │       ├── models.py           # SQLAlchemy models (schema below)
 │       ├── schemas.py          # Pydantic request/response models
 │       ├── seed.py             # first-run seed: Fastener fields, standards presets, prompt v1.0
@@ -164,6 +169,10 @@ Upload a PDF from `data/blueprints/` on the Documents page and watch it move thr
 ### Local development (hot reload)
 
 ```bash
+# database — one-time setup on a locally installed Postgres
+psql -d postgres -c "CREATE ROLE blueprint LOGIN PASSWORD 'blueprint';" \
+                  -c "CREATE DATABASE blueprint_local OWNER blueprint;"
+
 # backend — http://localhost:8000
 cd backend
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
@@ -175,12 +184,12 @@ npm install
 npm run dev
 ```
 
-Local backend data lands in `backend/data-store/` (git-ignored) instead of the Docker volume.
+A host-run backend defaults to the `blueprint_local` database on the **system Postgres** (`localhost:5433` on this machine) — no Docker needed at all for local dev. This keeps local-dev data separate from the dockerized app's `blueprint` database (which lives in the compose `db` service, exposed on `localhost:5434`). Uploaded files and artifacts land in `backend/data-store/` (git-ignored) instead of the Docker volume. Point `DATABASE_URL` elsewhere (e.g. in `backend/.env`) to use a different Postgres or port.
 
 ### Stopping / resetting
 
 ```bash
-docker compose down             # stop (data survives in the app-data volume)
+docker compose down             # stop (data survives in the app-data + db-data volumes)
 docker compose down -v          # stop AND wipe database + uploads + artifacts
 ```
 
@@ -195,7 +204,9 @@ All configuration is environment variables, read by `backend/app/config.py` (a `
 | `DATALAB_API_KEY` | *(empty)* | Datalab API key. Empty → mock mode. |
 | `DATALAB_MODE` | `auto` | `auto` (real when key present), `real`, or `mock` — force a mode. |
 | `EXTRACTION_MODE` | `balanced` | Datalab extract mode: `turbo` / `fast` / `balanced`. Balanced is slowest but most accurate and returns verification metadata. |
-| `DATA_DIR` | `/data` (Docker) | Root for SQLite DB, uploads, artifacts. |
+| `DATABASE_URL` | `postgresql+psycopg://blueprint:blueprint@localhost:5433/blueprint_local` | SQLAlchemy database URL. Default = `blueprint_local` on the system Postgres (local dev); compose overrides it to the `db` service's `blueprint` database. |
+| `POSTGRES_PASSWORD` | `blueprint` | Password for the compose `db` service (compose-only, sets both the server and the api's URL). |
+| `DATA_DIR` | `/data` (Docker) | Root for uploads and artifacts. |
 | `PIPELINE_WORKERS` | `2` | Concurrent pipeline worker threads. |
 | `POLL_INTERVAL` / `POLL_TIMEOUT` | `2.0` / `900` | Datalab polling cadence and give-up timeout (seconds). |
 
@@ -243,36 +254,44 @@ Swagger UI is live — expand any endpoint, click *Try it out*, and execute real
 
 ## Database Documentation
 
-**Engine:** SQLite (WAL mode) — a single file, zero setup, plenty for a POC.
-**Location:** `/data/app.db` inside the `api` container, persisted in the `app-data` Docker volume (local dev: `backend/data-store/app.db`). Tables are created automatically on startup (plus small additive column migrations in `main.py:_run_migrations` for existing databases); first run also seeds the Fastener part type, 8 standards presets, and prompt v1.0.
+**Engine:** PostgreSQL 16. Two independent databases, one per way of running the app:
+
+- **`blueprint`** — used by the dockerized `api` service; lives in the `db` compose service (image `postgres:16-alpine`, data in the `db-data` volume), exposed on **host port 5434**.
+- **`blueprint_local`** — used by a backend run directly on the host; lives on the **system Postgres** (`localhost:5433` on this machine), so local dev works with Docker fully stopped. One-time setup: create the `blueprint` role and the database (see the local development section).
+
+Tables are created automatically on startup (plus small additive column migrations in `main.py:_run_migrations` for existing databases); first run also seeds the Fastener part type, 8 standards presets, and prompt v1.0. Credentials default to `blueprint` / `blueprint` (compose: override with `POSTGRES_PASSWORD`).
 
 ### How to access the database
 
-**1. Interactive SQL shell inside the container** (no tools to install — uses Python 3.12's built-in sqlite3 CLI):
+**1. Interactive SQL shell inside the container:**
 
 ```bash
-docker compose exec api python -m sqlite3 /data/app.db
-# sqlite> .tables
-# sqlite> SELECT id, filename, status, part_number FROM documents;
-# sqlite> .quit
+docker compose exec db psql -U blueprint -d blueprint
+# blueprint=# \dt
+# blueprint=# SELECT id, filename, status, part_number FROM documents;
+# blueprint=# \q
 ```
 
 **2. One-off queries from your shell:**
 
 ```bash
-docker compose exec api python -m sqlite3 /data/app.db \
-  "SELECT field_key, value, match_quality FROM extracted_fields LIMIT 20;"
+docker compose exec db psql -U blueprint -d blueprint \
+  -c "SELECT field_key, value, match_quality FROM extracted_fields LIMIT 20;"
 ```
 
-**3. Open it in a GUI** (TablePlus, DBeaver, DB Browser for SQLite): copy the file out first —
+**3. GUI clients** (TablePlus, DBeaver, pgAdmin): user `blueprint`, password `blueprint` — `localhost:5434` / database `blueprint` for the dockerized app's data, `localhost:5433` / database `blueprint_local` for host-run dev data.
+
+### Migrating a legacy SQLite database
+
+Databases created before the Postgres switch (`/data/app.db` in the `app-data` volume, or `backend/data-store/app.db` for local dev) can be copied over with the one-off script:
 
 ```bash
-docker cp blueprint-poc-api-1:/data/app.db ./app.db
+cd backend
+python -m scripts.migrate_sqlite_to_postgres data-store/app.db \
+  postgresql+psycopg://blueprint:blueprint@localhost:5433/blueprint_local
 ```
 
-(Copy rather than mounting the live file — SQLite WAL + two processes on one file is asking for locks.)
-
-**4. Local dev:** just open `backend/data-store/app.db` directly with any SQLite tool.
+It creates the schema, refuses non-empty targets, copies all tables preserving ids (older databases missing newer columns get the model defaults), and resets the id sequences.
 
 ### Schema
 
@@ -299,8 +318,8 @@ Useful queries:
 ```sql
 -- accuracy per prompt version (what the dashboard computes)
 SELECT pv.label,
-       SUM(ef.status = 'verified')  AS verified,
-       SUM(ef.status = 'corrected') AS corrected
+       COUNT(*) FILTER (WHERE ef.status = 'verified')  AS verified,
+       COUNT(*) FILTER (WHERE ef.status = 'corrected') AS corrected
 FROM extracted_fields ef
 JOIN extractions e  ON e.id = ef.extraction_id
 JOIN prompt_versions pv ON pv.id = e.prompt_version_id
@@ -408,14 +427,15 @@ docker compose logs -f web      # nginx access log
 | Extraction failed with a Datalab error | Check the message on the failed row. Poll timeouts on huge files → raise `POLL_TIMEOUT`. Auth errors → check the key. Retries are cheap (Convert results are cached upstream). |
 | A field has a value but "no location" | Datalab returned no citation (`NOT_RESOLVABLE`) or the text couldn't be found on any page. The field's reasoning note says so — verify it manually; it still counts in accuracy once reviewed. |
 | Bounding boxes look rotated / land on empty space | The page was processed sideways. This should be fixed automatically (check `orientation.json` in the document's artifacts — it records detected pages and the rotation applied). If detection missed it, reprocess the document; if it persists, inspect `ocr.json` line boxes. |
-| Port 8080 or 8000 already in use | Change the published ports in `docker-compose.yml` (`"8080:80"`, `"8000:8000"`). |
+| Port 8080, 8000, or 5434 already in use | Change the published ports in `docker-compose.yml` (`"8080:80"`, `"8000:8000"`, `"5434:5432"`). |
+| Host-run backend: `connection refused` on port 5433 | The system Postgres isn't running (`brew services start postgresql@16`), or yours listens on a different port — set `DATABASE_URL` in `backend/.env`. |
 | Wipe everything and start fresh | `docker compose down -v && docker compose up --build -d` |
 
 ---
 
 ## Design Decisions
 
-- **SQLite over Postgres** — single-user POC; one file, zero ops, easy to copy out and inspect. The SQLAlchemy layer keeps a Postgres swap mechanical if this graduates.
+- **PostgreSQL (migrated from SQLite, July 2026)** — the POC started on SQLite (one file, zero ops); the SQLAlchemy layer made the swap mechanical when it graduated. Legacy SQLite data moves over with `backend/scripts/migrate_sqlite_to_postgres.py`.
 - **In-process worker threads over Celery/Redis** — two workers polling Datalab is not a distributed-systems problem. Startup requeue covers restart safety.
 - **Normalized `[0..1]` bbox coordinates** — decouples storage from render scale, rotation, and the two different Datalab pixel spaces.
 - **OCR endpoint added to the spec'd Convert+Extract pipeline** — Convert alone cannot locate values inside drawings (Picture blocks); line-level OCR boxes are what make the click-to-zoom demo land on the actual callout.
