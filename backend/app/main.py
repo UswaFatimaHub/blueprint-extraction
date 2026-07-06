@@ -50,6 +50,7 @@ def _run_migrations():
     migrations = [
         "ALTER TABLE extracted_fields ADD COLUMN source_text TEXT",
         "ALTER TABLE corrections ADD COLUMN source_snippet TEXT",
+        "ALTER TABLE documents ADD COLUMN file_data BYTEA",
     ]
     for stmt in migrations:
         try:

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -74,6 +74,9 @@ class Document(Base):
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
     filename: Mapped[str] = mapped_column(String(300))
     stored_path: Mapped[str] = mapped_column(String(500))
+    # canonical copy of whatever stored_path currently points to — the local
+    # disk file is ephemeral on redeploy, this is the durable backing store
+    file_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     content_type: Mapped[str] = mapped_column(String(100), default="application/pdf")
     part_type_id: Mapped[int | None] = mapped_column(ForeignKey("part_types.id", ondelete="SET NULL"), nullable=True)
     # queued | processing | completed | failed

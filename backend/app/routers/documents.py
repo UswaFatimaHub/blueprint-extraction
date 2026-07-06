@@ -1,5 +1,4 @@
 import shutil
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -71,17 +70,18 @@ def upload_documents(
         content_type = upload.content_type or "application/pdf"
         if content_type not in ALLOWED_TYPES:
             raise HTTPException(415, f"Unsupported file type: {content_type}")
+        content = upload.file.read()
         doc = Document(
             filename=upload.filename or "document.pdf",
             stored_path="",
+            file_data=content,
             content_type=content_type,
             part_type_id=part_type_id,
         )
         db.add(doc)
         db.flush()
         dest = settings.uploads_dir / f"{doc.id}{ALLOWED_TYPES[content_type]}"
-        with dest.open("wb") as out:
-            shutil.copyfileobj(upload.file, out)
+        dest.write_bytes(content)
         doc.stored_path = str(dest)
         created.append(doc)
 
@@ -133,9 +133,12 @@ def get_document(document_id: str, db: Session = Depends(get_db)):
 @router.get("/{document_id}/file")
 def get_document_file(document_id: str, db: Session = Depends(get_db)):
     doc = db.get(Document, document_id)
-    if doc is None or not doc.stored_path or not Path(doc.stored_path).exists():
+    if doc is None:
+        raise HTTPException(404, "Document not found")
+    path = pipeline.ensure_local_file(doc)
+    if path is None:
         raise HTTPException(404, "File not found")
-    return FileResponse(doc.stored_path, media_type=doc.content_type, filename=doc.filename)
+    return FileResponse(path, media_type=doc.content_type, filename=doc.filename)
 
 
 @router.post("/{document_id}/process", response_model=DocumentOut)

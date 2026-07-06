@@ -45,6 +45,25 @@ def _artifacts_dir(document_id: str) -> Path:
     return d
 
 
+def ensure_local_file(doc: Document) -> Path | None:
+    """Recreate stored_path on disk from the DB-backed copy if a redeploy wiped it.
+
+    The container filesystem doesn't survive redeploys, but file_data does
+    (it lives in Postgres), so this is the recovery path for both serving
+    and reprocessing.
+    """
+    if not doc.stored_path:
+        return None
+    path = Path(doc.stored_path)
+    if path.exists():
+        return path
+    if not doc.file_data:
+        return None
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(doc.file_data)
+    return path
+
+
 def _save_artifact(directory: Path, name: str, content) -> None:
     try:
         path = directory / name
@@ -74,6 +93,11 @@ def process_document(document_id: str) -> None:
         doc.status, doc.phase, doc.error = "processing", "convert", None
         db.commit()
 
+        if ensure_local_file(doc) is None:
+            doc.status, doc.error = "failed", "Source file is missing and could not be restored"
+            db.commit()
+            return
+
         client = get_client()
         artifacts = _artifacts_dir(doc.id)
 
@@ -92,6 +116,7 @@ def process_document(document_id: str) -> None:
                 _save_artifact(artifacts, "orientation.json", info)
                 if normalized_path:
                     doc.stored_path = normalized_path
+                    doc.file_data = Path(normalized_path).read_bytes()
                     db.commit()
                     # coordinates changed — re-OCR the upright document
                     ocr_result = client.ocr(doc.stored_path, doc.filename, doc.content_type)
