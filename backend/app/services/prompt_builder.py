@@ -28,19 +28,33 @@ def get_active_standards(db: Session) -> list[StandardRule]:
 def get_correction_warnings(db: Session) -> dict[str, list[str]]:
     """Group correction reasons by field key -> warning lines, most frequent first."""
     corrections = list(db.scalars(select(Correction).order_by(Correction.created_at.desc())))
-    by_field: dict[str, list[Correction]] = {}
+    by_field: dict[str, list[tuple[str, str | None]]] = {}
     for c in corrections:
-        if c.reason.strip():
-            by_field.setdefault(c.field_key, []).append(c)
+        reason = c.reason.strip()
+        if not reason:
+            # no explanation typed — the wrong->right values are still a lesson
+            if not (c.corrected_value or "").strip():
+                continue
+            original = (c.original_value or "").strip() or "(blank)"
+            reason = f"AI answered '{original}' here; the engineer corrected it to '{c.corrected_value}'"
+        by_field.setdefault(c.field_key, []).append((reason, c.source_snippet))
 
     warnings: dict[str, list[str]] = {}
     for key, items in by_field.items():
         # Deduplicate near-identical reasons, keep frequency for emphasis
-        counts = Counter(c.reason.strip() for c in items)
+        counts = Counter(reason for reason, _ in items)
+        # verbatim printed text under the engineer's marked box, newest first
+        snippets: dict[str, str] = {}
+        for reason, snippet in items:
+            if snippet and reason not in snippets:
+                snippets[reason] = snippet
         lines = []
         for reason, n in counts.most_common(MAX_WARNINGS_PER_FIELD):
             suffix = f" (seen {n} times)" if n > 1 else ""
-            lines.append(f"{reason}{suffix}")
+            hint = ""
+            if reason in snippets:
+                hint = f" [engineer marked where the correct value is printed; the text there reads: '{snippets[reason]}']"
+            lines.append(f"{reason}{suffix}{hint}")
         warnings[key] = lines
     return warnings
 

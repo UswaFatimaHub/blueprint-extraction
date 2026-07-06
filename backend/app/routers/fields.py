@@ -1,10 +1,17 @@
+import json
+import logging
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import Document, ExtractedField
-from ..schemas import CorrectionIn, CorrectionOut, ExtractedFieldOut, FieldStatusPatch
+from ..schemas import BBox, CorrectionIn, CorrectionOut, ExtractedFieldOut, FieldStatusPatch
 from ..models import Correction
+from ..services import merge
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["fields"])
 
@@ -19,6 +26,22 @@ def set_field_status(field_id: int, patch: FieldStatusPatch, db: Session = Depen
         field.corrected_value = None
     db.commit()
     return field
+
+
+def _region_snippet(field: ExtractedField, bbox: BBox) -> str | None:
+    """Printed text under the engineer's marked box, from the run's OCR artifact."""
+    try:
+        if field.extraction is None or not field.extraction.artifacts_dir:
+            return None
+        ocr_path = Path(field.extraction.artifacts_dir) / "ocr.json"
+        if not ocr_path.exists():
+            return None
+        payload = json.loads(ocr_path.read_text(), strict=False)
+        text = merge.region_text(payload, bbox.page, (bbox.x, bbox.y, bbox.x + bbox.w, bbox.y + bbox.h))
+        return text[:300] if text else None
+    except Exception:
+        logger.exception("Could not read OCR snippet for field %s — saving correction without it", field.id)
+        return None
 
 
 @router.post("/corrections", response_model=CorrectionOut, status_code=201)
@@ -46,6 +69,21 @@ def create_correction(payload: CorrectionIn, db: Session = Depends(get_db)):
         correction.bbox_y = payload.bbox.y
         correction.bbox_w = payload.bbox.w
         correction.bbox_h = payload.bbox.h
+        correction.source_snippet = _region_snippet(field, payload.bbox)
+
+        # the engineer's marked box is better location info than a wrong match
+        field.page = payload.bbox.page
+        field.bbox_x = payload.bbox.x
+        field.bbox_y = payload.bbox.y
+        field.bbox_w = payload.bbox.w
+        field.bbox_h = payload.bbox.h
+        field.match_quality = "anchor"
+        loc = {"page": payload.bbox.page, "x": payload.bbox.x, "y": payload.bbox.y,
+               "w": payload.bbox.w, "h": payload.bbox.h, "q": "anchor"}
+        field.locations = [loc] + [
+            l for l in (field.locations or [])
+            if not (l.get("page") == loc["page"] and merge._xywh_overlap(l, loc))
+        ]
 
     field.status = "corrected"
     field.corrected_value = correction.corrected_value

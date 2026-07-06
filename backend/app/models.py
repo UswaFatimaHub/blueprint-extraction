@@ -157,6 +157,8 @@ class Correction(Base):
     corrected_value: Mapped[str] = mapped_column(Text)
     reason: Mapped[str] = mapped_column(Text, default="")
     category: Mapped[str] = mapped_column(String(100), default="")
+    # OCR text found under the engineer's marked box — verbatim printed evidence
+    source_snippet: Mapped[str | None] = mapped_column(Text, nullable=True)
     page: Mapped[int | None] = mapped_column(Integer, nullable=True)
     bbox_x: Mapped[float | None] = mapped_column(Float, nullable=True)
     bbox_y: Mapped[float | None] = mapped_column(Float, nullable=True)

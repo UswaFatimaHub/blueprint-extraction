@@ -532,6 +532,74 @@ def _occurrence_boxes(
 
 
 # ---------------------------------------------------------------------------
+# Correction anchoring — engineer-marked regions from saved corrections
+# ---------------------------------------------------------------------------
+
+def region_text(ocr_payload, page: int, region: tuple[float, float, float, float]) -> str | None:
+    """Printed text inside a normalized page region, in reading order."""
+    lines = [l for l in parse_ocr(ocr_payload).get(page, []) if _intersects(l.bbox, region)]
+    if not lines:
+        return None
+    lines.sort(key=lambda l: (round(l.bbox[1], 2), l.bbox[0]))
+    text = " ".join(l.text.strip() for l in lines if l.text.strip())
+    text = re.sub(r"<[^>]+>", " ", text)  # OCR lines can carry <br> etc.
+    return re.sub(r"\s+", " ", text).strip() or None
+
+
+def apply_correction_anchors(merged: dict[str, dict], anchors: list[dict], ocr_payload) -> None:
+    """Re-anchor merged fields to engineer-marked correction regions (in place).
+
+    anchors: [{field_key, page, x, y, w, h, corrected_value, source_snippet}].
+    A merged bbox that already lands inside the marked region is kept. Otherwise
+    the marked region's OCR lines are searched for the field's text; failing
+    that, when the fresh value agrees with the engineer's correction, the marked
+    box itself is adopted. Anchored fields get match_quality 'anchor'.
+    """
+    ocr_lines = parse_ocr(ocr_payload)
+    for a in anchors:
+        m = merged.get(a["field_key"])
+        if not m or m.get("value") in (None, ""):
+            continue
+        page = a["page"]
+        region = (a["x"], a["y"], a["x"] + a["w"], a["y"] + a["h"])
+        bbox = m.get("bbox")
+        if bbox is not None and m.get("page") == page and _intersects(
+            (bbox["x"], bbox["y"], bbox["x"] + bbox["w"], bbox["y"] + bbox["h"]), region
+        ):
+            continue
+
+        values_agree = _normalize(str(a["corrected_value"])) == _normalize(str(m["value"]))
+        candidates = [l for l in ocr_lines.get(page, []) if _intersects(l.bbox, region)]
+        probes = [m.get("source_text"), str(m["value"])]
+        if values_agree and a.get("source_snippet"):
+            probes.insert(0, a["source_snippet"])
+
+        anchored: dict | None = None
+        for probe in probes:
+            if not probe:
+                continue
+            words, _ = _match_ocr_lines(probe, candidates, LINE_THRESHOLD)
+            if words:
+                b = _union_bbox([w.bbox for w in words])
+                anchored = {"x": b[0], "y": b[1], "w": b[2] - b[0], "h": b[3] - b[1]}
+                break
+        if anchored is None and values_agree:
+            anchored = {"x": a["x"], "y": a["y"], "w": a["w"], "h": a["h"]}
+        if anchored is None:
+            continue
+
+        m["page"] = page
+        m["bbox"] = anchored
+        m["match_quality"] = "anchor"
+        loc = {"page": page, **anchored, "q": "anchor"}
+        others = [
+            l for l in (m.get("locations") or [])
+            if not (l.get("page") == page and _xywh_overlap(l, loc))
+        ]
+        m["locations"] = [loc] + others
+
+
+# ---------------------------------------------------------------------------
 # Extraction payload parsing
 # ---------------------------------------------------------------------------
 

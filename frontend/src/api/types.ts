@@ -1,7 +1,7 @@
 export type DocumentStatus = 'queued' | 'processing' | 'completed' | 'failed'
 export type DocumentPhase = 'queued' | 'convert' | 'extract' | 'merge' | 'done'
 export type FieldStatus = 'unverified' | 'verified' | 'corrected'
-export type MatchQuality = 'word' | 'line' | 'block' | 'none'
+export type MatchQuality = 'anchor' | 'word' | 'line' | 'block' | 'none'
 
 export interface BBox {
   x: number

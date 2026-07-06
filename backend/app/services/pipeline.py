@@ -16,10 +16,10 @@ from sqlalchemy import select
 
 from ..config import settings
 from ..database import SessionLocal
-from ..models import Document, ExtractedField, Extraction, PromptVersion
+from ..models import Correction, Document, ExtractedField, Extraction, PromptVersion
 from . import prompt_builder
 from .datalab import get_client
-from .merge import merge_extraction
+from .merge import apply_correction_anchors, merge_extraction
 from .orientation import normalize_orientation
 
 logger = logging.getLogger(__name__)
@@ -135,6 +135,27 @@ def process_document(document_id: str) -> None:
             field_keys=field_keys,
             ocr_payload=ocr_result,
         )
+
+        # Engineer-marked correction boxes on this document are ground truth:
+        # re-anchor any field whose fresh bbox disagrees with them.
+        anchor_rows = db.scalars(
+            select(Correction)
+            .where(Correction.document_id == doc.id, Correction.bbox_x.is_not(None))
+            .order_by(Correction.created_at)
+        ).all()
+        if anchor_rows:
+            latest = {c.field_key: c for c in anchor_rows}  # newest per field wins
+            apply_correction_anchors(merged, [
+                {
+                    "field_key": c.field_key,
+                    "page": c.page,
+                    "x": c.bbox_x, "y": c.bbox_y, "w": c.bbox_w, "h": c.bbox_h,
+                    "corrected_value": c.corrected_value,
+                    "source_snippet": c.source_snippet,
+                }
+                for c in latest.values()
+            ], ocr_result)
+
         _save_artifact(artifacts, "merged.json", merged)
 
         prompt_version = _latest_prompt_version(db)

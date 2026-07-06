@@ -134,6 +134,7 @@ function PriorityIcon({ confidence }: { confidence: number | null }) {
 }
 
 const matchGlyph: Record<string, { label: string; className: string }> = {
+  anchor: { label: 'engineer anchored', className: 'text-accent/90' },
   word: { label: 'exact match', className: 'text-good/90' },
   line: { label: 'drawing match', className: 'text-good/70' },
   block: { label: 'region match', className: 'text-warn/80' },

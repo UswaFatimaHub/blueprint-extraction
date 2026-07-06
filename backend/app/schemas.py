@@ -98,6 +98,7 @@ class CorrectionOut(ORMModel):
     corrected_value: str
     reason: str
     category: str
+    source_snippet: str | None = None
     page: int | None
     bbox_x: float | None
     bbox_y: float | None
