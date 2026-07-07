@@ -122,14 +122,14 @@ const fieldLocations = (f: ExtractedField): FieldLocation[] => {
   return []
 }
 
-/** review-priority dot by OCR confidence (unverified fields only) */
+/** review-priority dot by OCR confidence (unverified fields only) — same tiers/colors as ConfidenceMeter */
 function PriorityIcon({ confidence }: { confidence: number | null }) {
   const tier =
-    confidence == null || confidence < 0.4
+    confidence == null || confidence < 0.7
       ? { color: 'bg-crit', label: 'High priority — low confidence' }
-      : confidence <= 0.75
+      : confidence < 0.9
         ? { color: 'bg-warn', label: 'Medium priority' }
-        : { color: 'bg-accent', label: 'Low priority — likely correct' }
+        : { color: 'bg-good', label: 'Low priority — likely correct' }
   return <span className={cn('led shrink-0', tier.color)} title={tier.label} aria-label={tier.label} />
 }
 
@@ -185,7 +185,9 @@ function FieldRow({
     ) : field.status === 'corrected' ? (
       <Badge tone="crit"><Pencil size={12} /> Corrected</Badge>
     ) : (
-      <Badge tone="warn"><PriorityIcon confidence={field.confidence} /> Review</Badge>
+      // <Badge tone="warn"><PriorityIcon confidence={field.confidence} /> Review</Badge>
+      <Badge tone="warn"> Review</Badge>
+
     )
 
   const save = () => {
