@@ -1,7 +1,7 @@
 from collections import Counter
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from ..config import settings
@@ -84,3 +84,14 @@ def meta():
         extraction_mode=settings.extraction_mode,
         has_api_key=bool(settings.datalab_api_key),
     )
+
+
+@router.get("/warmup")
+def warmup(db: Session = Depends(get_db)):
+    """Touch the DB so Neon's compute resumes before the user's first real query.
+
+    Kept separate from /api/health so DO's readiness probe never depends on
+    Neon being awake or reachable.
+    """
+    db.execute(text("SELECT 1"))
+    return {"status": "ok"}

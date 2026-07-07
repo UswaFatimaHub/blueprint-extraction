@@ -2,6 +2,7 @@ import { FileStack, FlaskConical, Menu, Moon, Ruler, Shapes, Sun, TrendingUp, X 
 import { useEffect, useState } from 'react'
 import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 
+import { BASE } from './api/client'
 import { useMeta } from './api/hooks'
 import AmbientBackdrop from './components/AmbientBackdrop'
 import { useTheme } from './lib/theme'
@@ -226,6 +227,12 @@ function MobileNav() {
 }
 
 export default function App() {
+  // fire-and-forget: wakes Neon's compute as early as possible so it's
+  // warm by the time the user does anything that actually needs data
+  useEffect(() => {
+    fetch(`${BASE}/api/warmup`).catch(() => {})
+  }, [])
+
   return (
     <div className="flex h-screen flex-col overflow-hidden md:flex-row">
       <AmbientBackdrop />
