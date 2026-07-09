@@ -482,6 +482,21 @@ def _xywh_overlap(a: dict, b: dict) -> bool:
     )
 
 
+# location precision, best first — a precise word box beats the coarse block-region
+# fallback for the same spot, so overlapping occurrences keep the higher-ranked one
+_Q_RANK = {"anchor": 4, "word": 3, "line": 2, "block": 1, "none": 0}
+
+
+def _add_location(locations: list[dict], occ: dict) -> None:
+    """Add an occurrence, but when it overlaps a known one keep the more precise box."""
+    for i, known in enumerate(locations):
+        if occ["page"] == known["page"] and _xywh_overlap(occ, known):
+            if _Q_RANK.get(occ["q"], 0) > _Q_RANK.get(known["q"], 0):
+                locations[i] = occ
+            return
+    locations.append(occ)
+
+
 def _occurrence_boxes(
     value: str,
     source_text: str | None,
@@ -528,6 +543,39 @@ def _occurrence_boxes(
                 "w": region[2] - region[0], "h": region[3] - region[1],
                 "q": "block",
             })
+    return occs
+
+
+def _alternate_occurrences(
+    sources: list[str],
+    source_citations: list[str],
+    primary_needles: list[str | None],
+    html_blocks: dict[str, BlockInfo],
+    json_blocks: dict[str, BlockInfo],
+    pages: dict[int, PageInfo],
+    ocr_lines: dict[int, list[OCRLine]],
+) -> list[dict]:
+    """Locate each additional printed form the extractor listed for a field.
+
+    The same value is often printed in several places with slightly different
+    formatting (e.g. '45.0' in a drawing view vs '45.00' in a table); the primary
+    match only finds one. Each distinct alternate form here is located on its own so
+    every instance becomes a navigable location. Only precise word/line matches are
+    kept — a loose box for a short numeric string would land anywhere.
+    """
+    occs: list[dict] = []
+    seen: set[str] = {_normalize(n) for n in primary_needles if n}
+    for raw in sources:
+        if not isinstance(raw, str):
+            continue
+        s = raw.strip()
+        norm = _normalize(s)
+        if not norm or norm in seen:
+            continue
+        seen.add(norm)
+        box = merge_field(s, source_citations, html_blocks, json_blocks, pages, ocr_lines)
+        if box.match_quality in ("word", "line") and box.x is not None:
+            occs.append({"page": box.page, "x": box.x, "y": box.y, "w": box.w, "h": box.h, "q": box.match_quality})
     return occs
 
 
@@ -693,6 +741,15 @@ def merge_extraction(
             source_citations = [source_citations]
         source_citations = [str(c) for c in source_citations] or citations
 
+        # every printed occurrence the extractor listed (differently-formatted duplicates
+        # like "45.0" vs "45.00") plus the blocks it cited for them
+        sources_raw = values.get(f"{key}_sources")
+        alt_sources = [s for s in sources_raw if isinstance(s, str)] if isinstance(sources_raw, list) else []
+        sources_citations = values.get(f"{key}_sources_citations") or []
+        if not isinstance(sources_citations, list):
+            sources_citations = [sources_citations]
+        sources_citations = [str(c) for c in sources_citations]
+
         if value is None or (isinstance(value, str) and not value.strip()):
             results[key] = {
                 "value": None, "source_text": source_text, "page": None, "bbox": None,
@@ -727,20 +784,36 @@ def merge_extraction(
             primary = {"page": box.page, "x": box.x, "y": box.y, "w": box.w, "h": box.h, "q": box.match_quality}
             locations.append(primary)
             all_citations = citations + [c for c in source_citations if c not in citations]
+
+            # Locate the additional printed forms first (e.g. "45.0" and
+            # "M10X1.50X45.00"). These are precise word/line matches; adding them
+            # before _occurrence_boxes lets _add_location keep them over the coarse
+            # block-region fallback _occurrence_boxes emits for the same cited block.
+            if alt_sources:
+                alt_citations = sources_citations or all_citations
+                for occ in _alternate_occurrences(
+                    alt_sources, alt_citations, [value_str, source_text],
+                    html_blocks, json_blocks, pages, ocr_lines,
+                ):
+                    _add_location(locations, occ)
+
             for occ in _occurrence_boxes(value_str, source_text, all_citations, html_blocks, json_blocks, pages):
-                duplicate = any(
-                    occ["page"] == known["page"] and _xywh_overlap(occ, known) for known in locations
-                )
-                if not duplicate:
-                    locations.append(occ)
+                _add_location(locations, occ)
+
+        # the primary occurrence may have been upgraded to a more precise overlapping
+        # box; keep the top-level page/bbox/match_quality in sync with it
+        primary_loc = locations[0] if locations else None
 
         results[key] = {
             "value": value_str,
             "source_text": source_text,
-            "page": box.page,
-            "bbox": None if box.x is None else {"x": box.x, "y": box.y, "w": box.w, "h": box.h},
+            "page": primary_loc["page"] if primary_loc else box.page,
+            "bbox": (
+                {"x": primary_loc["x"], "y": primary_loc["y"], "w": primary_loc["w"], "h": primary_loc["h"]}
+                if primary_loc else (None if box.x is None else {"x": box.x, "y": box.y, "w": box.w, "h": box.h})
+            ),
             "confidence": box.confidence,
-            "match_quality": box.match_quality,
+            "match_quality": primary_loc["q"] if primary_loc else box.match_quality,
             "block_ids": box.block_ids,
             "locations": locations,
             "reasoning": _field_meta(values, key),

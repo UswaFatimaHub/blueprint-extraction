@@ -191,8 +191,11 @@ function FieldRow({
     !!field.value &&
     field.source_text.replace(/\W+/g, '').toLowerCase() !== field.value.replace(/\W+/g, '').toLowerCase()
 
-  const match = matchGlyph[field.match_quality] ?? matchGlyph.none
   const locations = fieldLocations(field)
+  // the tag reflects the occurrence currently in view — each location may have been
+  // matched at a different precision (e.g. an exact word hit vs a drawing-line match)
+  const shownQuality = locations[occIndex]?.q ?? field.match_quality
+  const match = matchGlyph[shownQuality] ?? matchGlyph.none
 
   const statusBadge =
     field.status === 'verified' ? (

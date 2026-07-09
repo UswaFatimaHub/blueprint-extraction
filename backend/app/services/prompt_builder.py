@@ -84,6 +84,11 @@ def build_root_description(part_type: PartType, standards: list[StandardRule]) -
         "document that the value was read or derived from — verbatim, character-for-character, keeping "
         "abbreviations, punctuation and case (e.g. 'CONE.WASH' for a Cone Washer, 'SC&WA' for a Screw "
         "Assembly). Never normalize or expand the *_source text.",
+        "Every attribute also has a companion *_sources array: list EVERY place that attribute is printed "
+        "on the drawing, giving the exact printed text at each. The same value is frequently shown in "
+        "several locations (a drawing view and a dimensions table) with slightly different formatting "
+        "(e.g. '45.0' vs '45.00') — enumerate all of them, exactly as printed, so each instance can be "
+        "located on the sheet.",
     ]
     if standards:
         lines.append("")
@@ -114,6 +119,20 @@ def build_page_schema(db: Session, part_type: PartType) -> dict:
                 "verbatim, character-for-character, including abbreviations, punctuation and case, exactly "
                 "as it appears (do NOT normalize, expand or reformat it). Null if the value was not read "
                 "from printed text."
+            ),
+        }
+        # every printed occurrence (a value is often shown in several places, formatted
+        # slightly differently) so the app can locate each instance, not just the first
+        properties[f"{field.key}_sources"] = {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": (
+                f"EVERY place '{field.label}' is printed on the drawing, as the exact text at each "
+                "location — verbatim, character-for-character (never normalize or reformat). The same "
+                "value is often printed in more than one spot (e.g. in a drawing view AND a dimensions "
+                "table) and may be written slightly differently at each (e.g. '45.0' in the view vs "
+                "'45.00' in the table) — list each occurrence separately, exactly as it reads there, and "
+                "cite each one. Include the primary occurrence too. Empty list if it is not printed."
             ),
         }
 
@@ -163,6 +182,9 @@ def build_prompt_text(db: Session, part_type: PartType) -> str:
         + ". Use null for attributes not present on the drawing.",
         "For every attribute also fill its companion <key>_source property with the exact printed text the "
         "value came from, verbatim (e.g. washer='Cone Washer' with washer_source='CONE.WASH').",
+        "Also fill <key>_sources with every place that attribute is printed on the drawing (exact text at "
+        "each) — the same value often appears in several spots with slightly different formatting "
+        "(e.g. length='45.00' with length_sources=['45.00', '45.0']).",
     ]
     return "\n".join(lines)
 
