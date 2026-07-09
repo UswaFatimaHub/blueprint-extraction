@@ -37,6 +37,8 @@ export interface FieldLocation {
   w: number
   h: number
   q: string
+  /** OCR confidence at this specific occurrence (null for anchors / region fallbacks) */
+  conf?: number | null
 }
 
 export interface ExtractedField {

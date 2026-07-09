@@ -1,8 +1,37 @@
 import { Loader2, X } from 'lucide-react'
-import { type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes, useEffect } from 'react'
+import { type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
 import { cn } from '../lib/utils'
+
+// ---- HoverFull: truncated text that reveals its full content on hover -------
+
+/** Renders children truncated to one line; on hover (only when actually clipped)
+    shows the full `title` in a portal tooltip that escapes any overflow container. */
+export function HoverFull({ title, className, children }: { title: string; className?: string; children: ReactNode }) {
+  const ref = useRef<HTMLParagraphElement>(null)
+  const [rect, setRect] = useState<DOMRect | null>(null)
+  const show = () => {
+    const el = ref.current
+    if (el && el.scrollWidth > el.clientWidth + 1) setRect(el.getBoundingClientRect())
+  }
+  const hide = () => setRect(null)
+  return (
+    <p ref={ref} className={cn('truncate', className)} onMouseEnter={show} onMouseLeave={hide}>
+      {children}
+      {rect &&
+        createPortal(
+          <span
+            className="pointer-events-none fixed z-[200] max-w-md whitespace-normal break-words rounded-md border border-line bg-surface-3 px-2.5 py-1.5 text-[12.5px] leading-snug text-ink shadow-xl"
+            style={{ left: Math.min(rect.left, window.innerWidth - 340), top: rect.bottom + 6 }}
+          >
+            {title}
+          </span>,
+          document.body,
+        )}
+    </p>
+  )
+}
 
 // ---- Button -----------------------------------------------------------------
 

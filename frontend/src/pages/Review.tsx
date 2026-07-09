@@ -27,7 +27,7 @@ import {
 import { ApiError, BASE } from '../api/client'
 import type { BBox, DocumentDetail, ExtractedField, FieldLocation } from '../api/types'
 import BlueprintViewer, { type ViewerHandle } from '../components/BlueprintViewer'
-import { Badge, BlueprintArt, Button, ConfidenceMeter, Input, Kbd, PageSpinner, ProgressRing, Textarea } from '../components/ui'
+import { Badge, BlueprintArt, Button, ConfidenceMeter, HoverFull, Input, Kbd, PageSpinner, ProgressRing, Textarea } from '../components/ui'
 import { cn, formatPct } from '../lib/utils'
 
 const CATEGORY_SUGGESTIONS = [
@@ -192,10 +192,12 @@ function FieldRow({
     field.source_text.replace(/\W+/g, '').toLowerCase() !== field.value.replace(/\W+/g, '').toLowerCase()
 
   const locations = fieldLocations(field)
-  // the tag reflects the occurrence currently in view — each location may have been
-  // matched at a different precision (e.g. an exact word hit vs a drawing-line match)
-  const shownQuality = locations[occIndex]?.q ?? field.match_quality
+  // the tag and confidence reflect the occurrence currently in view — each location was
+  // matched at its own precision and carries its own OCR confidence
+  const activeLoc = locations[occIndex]
+  const shownQuality = activeLoc?.q ?? field.match_quality
   const match = matchGlyph[shownQuality] ?? matchGlyph.none
+  const shownConfidence = activeLoc?.conf ?? field.confidence
 
   const statusBadge =
     field.status === 'verified' ? (
@@ -275,29 +277,32 @@ function FieldRow({
 
         <div className="min-w-0 flex-1">
           {field.value ? (
-            <p
+            <HoverFull
+              title={field.value}
               className={cn(
-                'truncate font-mono text-[14px] tracking-tight',
+                'font-mono text-[14px] tracking-tight',
                 field.status === 'corrected' ? 'text-crit/70 line-through decoration-crit/50' : 'text-ink',
               )}
             >
               {field.value}
-            </p>
+            </HoverFull>
           ) : (
             <p className="text-[13.5px] italic text-ink-muted">not found</p>
           )}
           {field.status === 'corrected' && field.corrected_value && (
-            <p className="truncate font-mono text-[14px] tracking-tight text-good">{field.corrected_value}</p>
+            <HoverFull title={field.corrected_value} className="font-mono text-[14px] tracking-tight text-good">
+              {field.corrected_value}
+            </HoverFull>
           )}
           {sourceDiffers && (
-            <p className="mt-0.5 truncate text-[12px] text-ink-muted">
+            <HoverFull title={`read as “${field.source_text}”`} className="mt-0.5 text-[12px] text-ink-muted">
               read as <span className="font-mono text-accent/80">“{field.source_text}”</span>
-            </p>
+            </HoverFull>
           )}
         </div>
 
         <div className="hidden shrink-0 xl:block">
-          <ConfidenceMeter value={field.confidence} />
+          <ConfidenceMeter value={shownConfidence} />
         </div>
         <div className="w-[100px] shrink-0 text-right">{statusBadge}</div>
 

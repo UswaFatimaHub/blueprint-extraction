@@ -361,6 +361,17 @@ WORD_THRESHOLD = 0.6
 LINE_THRESHOLD = 0.6
 GLOBAL_WORD_THRESHOLD = 0.82
 GLOBAL_LINE_THRESHOLD = 0.85
+# a near-exact fuzzy score means the value is printed verbatim; below it, a literal
+# OCR substring hit (the value inside a bigger token) is more trustworthy than the
+# fuzzy word window, which for short/abbreviated strings drifts onto lookalike words
+STRONG_WORD_THRESHOLD = 0.9
+
+# Secondary occurrences are supplementary — a loose fuzzy hit there is worse than
+# none (it draws a box over unrelated text), so they demand a near-exact match.
+OCCURRENCE_WORD_THRESHOLD = 0.85
+OCCURRENCE_OCR_THRESHOLD = 0.85
+# below this length a literal substring matches inside too many tokens to trust
+MIN_SUBSTRING_LEN = 4
 
 
 def merge_field(
@@ -396,42 +407,58 @@ def merge_field(
             confidence=_avg_conf(words), match_quality=quality, block_ids=block_ids,
         )
 
+    # OCR lines inside the cited blocks' regions (used by the substring + fuzzy steps)
+    cited_lines: list[OCRLine] = []
+    for b in resolved:
+        region = _norm_block_bbox(b, pages)
+        if not region:
+            continue
+        for line in ocr_lines.get(b.page, []):
+            if _intersects(line.bbox, region):
+                cited_lines.append(line)
+
     # ---- 1) word-level match inside cited blocks (convert HTML) ----------
+    best_words: list[Word] = []
+    best_score = 0.0
     cited_words = [w for b in resolved for w in b.words]
     if cited_words:
         by_page: dict[int, list[Word]] = {}
         for w in cited_words:
             by_page.setdefault(w.page, []).append(w)
-        best_words: list[Word] = []
-        best_score = 0.0
         for page_words in by_page.values():
             words, score = find_best_window(value, page_words)
             if score > best_score:
                 best_words, best_score = words, score
-        if best_score >= WORD_THRESHOLD:
+        # a near-exact word match means the value is printed verbatim here — trust it
+        if best_score >= STRONG_WORD_THRESHOLD:
             result = words_result(best_words, "word", normalized=False)
             if result:
                 return result
 
-    # ---- 2) OCR lines restricted to the cited blocks' regions ------------
-    cited_regions: list[tuple[int, tuple[float, float, float, float]]] = []
-    for b in resolved:
-        region = _norm_block_bbox(b, pages)
-        if region:
-            cited_regions.append((b.page, region))
-    if cited_regions:
-        candidates: list[OCRLine] = []
-        for page_idx, region in cited_regions:
-            for line in ocr_lines.get(page_idx, []):
-                if _intersects(line.bbox, region):
-                    candidates.append(line)
-        words, score = _match_ocr_lines(value, candidates, LINE_THRESHOLD)
+    # ---- 2) verbatim substring in cited OCR — beats a weak fuzzy word match.
+    # Stops e.g. the abbreviation "SC&WA" from settling on the lookalike word
+    # "Scala" (0.67) when it is printed exactly inside "SC&WA/HEX.HD" nearby. ---
+    sub = _substring_box(value, cited_lines)
+    if sub:
+        (x0, y0, x1, y1), conf, page_idx = sub
+        return MergedBox(page=page_idx, x=x0, y=y0, w=x1 - x0, h=y1 - y0,
+                         confidence=conf, match_quality="line", block_ids=block_ids)
+
+    # ---- 3) weaker fuzzy word match inside cited blocks ------------------
+    if best_score >= WORD_THRESHOLD:
+        result = words_result(best_words, "word", normalized=False)
+        if result:
+            return result
+
+    # ---- 4) OCR line match restricted to the cited blocks' regions -------
+    if cited_lines:
+        words, score = _match_ocr_lines(value, cited_lines, LINE_THRESHOLD)
         if words:
             result = words_result(words, "line", normalized=True)
             if result:
                 return result
 
-    # ---- 3) document-wide word match (strict threshold) ------------------
+    # ---- 5) document-wide word match (strict threshold) ------------------
     all_words = [w for b in html_blocks.values() for w in b.words]
     if all_words:
         by_page = {}
@@ -447,7 +474,7 @@ def merge_field(
             if result:
                 return result
 
-    # ---- 4) document-wide OCR line match (strict threshold) --------------
+    # ---- 6) document-wide OCR line match (strict threshold) --------------
     all_lines = [l for lines in ocr_lines.values() for l in lines]
     words, score = _match_ocr_lines(value, all_lines, GLOBAL_LINE_THRESHOLD)
     if words:
@@ -455,7 +482,7 @@ def merge_field(
         if result:
             return result
 
-    # ---- 5) cited block bbox fallback -------------------------------------
+    # ---- 7) cited block bbox fallback -------------------------------------
     for block in resolved:
         if block.bbox:
             norm = _normalize_bbox(block.bbox, pages.get(block.page))
@@ -497,85 +524,113 @@ def _add_location(locations: list[dict], occ: dict) -> None:
     locations.append(occ)
 
 
-def _occurrence_boxes(
-    value: str,
-    source_text: str | None,
-    citations: list[str],
-    html_blocks: dict[str, BlockInfo],
-    json_blocks: dict[str, BlockInfo],
-    pages: dict[int, PageInfo],
-) -> list[dict]:
-    """One box per cited block — every place the extractor saw the value.
+def _substring_box(needle: str, lines: list[OCRLine]) -> tuple[float, float, float, float] | None:
+    """Locate a value that is glued into a larger printed token.
 
-    Tries a tight word-level match inside each block (source text first, since
-    that's what is physically printed), falling back to the block region.
+    Engineering drawings print dimensions inside compound callouts — '25.0' inside
+    'M6.0X1.00X25.0', 'SC&WA' inside 'SC&WA/HEX.HD'. Fuzzy scoring rates those below
+    threshold because of the surrounding characters, so instead we look for the value
+    as a literal (normalized) substring of a single OCR token and estimate a tight
+    sub-box from its character offset. Returns (bbox, ocr_confidence, page), or None.
     """
-    occs: list[dict] = []
-    seen: set[str] = set()
-    for cited in citations:
-        block = _resolve_block(str(cited), html_blocks, json_blocks)
-        if block is None or block.id in seen:
-            continue
-        seen.add(block.id)
-        if not block.words and block.id in html_blocks:
-            block = html_blocks[block.id]
-
-        best_words: list[Word] = []
-        best_score = 0.0
-        for needle in (source_text, value):
-            if not needle:
+    key = _normalize(needle)
+    if len(key) < MIN_SUBSTRING_LEN:
+        return None
+    best: tuple[float, tuple[float, float, float, float], float | None, int] | None = None
+    for line in lines:
+        for w in _line_words(line):
+            token = _normalize(w.text)
+            idx = token.find(key)
+            if idx < 0:
                 continue
-            words, score = find_best_window(needle, block.words)
-            if score > best_score:
-                best_words, best_score = words, score
-        if best_score >= WORD_THRESHOLD and best_words:
-            bbox = _union_bbox([w.bbox for w in best_words])
-            norm = _normalize_bbox(bbox, pages.get(best_words[0].page))
-            if norm:
-                occs.append({"page": best_words[0].page, "x": norm[0], "y": norm[1], "w": norm[2], "h": norm[3], "q": "word"})
-                continue
-
-        region = _norm_block_bbox(block, pages)
-        if region is not None and block.page is not None:
-            occs.append({
-                "page": block.page,
-                "x": region[0], "y": region[1],
-                "w": region[2] - region[0], "h": region[3] - region[1],
-                "q": "block",
-            })
-    return occs
+            total = max(len(token), 1)
+            x0, y0, x1, y1 = w.bbox
+            width = x1 - x0
+            sx0 = x0 + (idx / total) * width
+            sx1 = x0 + ((idx + len(key)) / total) * width
+            span = sx1 - sx0
+            if best is None or span < best[0]:
+                best = (span, (sx0, y0, sx1, y1), w.confidence, w.page)
+    return (best[1], best[2], best[3]) if best else None
 
 
-def _alternate_occurrences(
-    sources: list[str],
-    source_citations: list[str],
-    primary_needles: list[str | None],
+def _locate_occurrences(
+    needles: list[str | None],
+    citations: list[str],
     html_blocks: dict[str, BlockInfo],
     json_blocks: dict[str, BlockInfo],
     pages: dict[int, PageInfo],
     ocr_lines: dict[int, list[OCRLine]],
 ) -> list[dict]:
-    """Locate each additional printed form the extractor listed for a field.
+    """One tight box per cited block for any printed form of the value.
 
-    The same value is often printed in several places with slightly different
-    formatting (e.g. '45.0' in a drawing view vs '45.00' in a table); the primary
-    match only finds one. Each distinct alternate form here is located on its own so
-    every instance becomes a navigable location. Only precise word/line matches are
-    kept — a loose box for a short numeric string would land anywhere.
+    Per cited block, in order of precision: an exact/near-exact Convert word window;
+    then OCR inside the block region — a literal substring (a value glued into a
+    bigger token) or a strong fuzzy line match; and only if all of those fail, the
+    block region itself. The OCR steps are what keep image-only blocks (drawings,
+    picture-based headers) from always degrading to a coarse 'region match'.
     """
+    forms: list[str] = []
+    seen_forms: set[str] = set()
+    for n in needles:
+        if isinstance(n, str) and n.strip():
+            k = _normalize(n)
+            if k and k not in seen_forms:
+                seen_forms.add(k)
+                forms.append(n.strip())
+
     occs: list[dict] = []
-    seen: set[str] = {_normalize(n) for n in primary_needles if n}
-    for raw in sources:
-        if not isinstance(raw, str):
+    seen_blocks: set[str] = set()
+    for cited in citations:
+        block = _resolve_block(str(cited), html_blocks, json_blocks)
+        if block is None or block.id in seen_blocks:
             continue
-        s = raw.strip()
-        norm = _normalize(s)
-        if not norm or norm in seen:
+        seen_blocks.add(block.id)
+        if not block.words and block.id in html_blocks:
+            block = html_blocks[block.id]
+        page = block.page
+        region = _norm_block_bbox(block, pages)
+
+        # 1) Convert word window inside the block — exact or near-exact only
+        best_words: list[Word] = []
+        best_score = 0.0
+        for n in forms:
+            words, score = find_best_window(n, block.words)
+            if score > best_score:
+                best_words, best_score = words, score
+        if best_words and best_score >= OCCURRENCE_WORD_THRESHOLD:
+            bbox = _union_bbox([w.bbox for w in best_words])
+            norm = _normalize_bbox(bbox, pages.get(page))
+            if norm:
+                occs.append({"page": page, "x": norm[0], "y": norm[1], "w": norm[2], "h": norm[3],
+                             "q": "word", "conf": _avg_conf(best_words)})
+                continue
+
+        # 2) OCR within the block region — literal substring first, then strong fuzzy.
+        # OCR boxes are line-precision (char positions are estimated), so 'line'.
+        lines = [l for l in ocr_lines.get(page, []) if _intersects(l.bbox, region)] if region else []
+        sub = next((s for n in forms if (s := _substring_box(n, lines))), None)
+        if sub:
+            (sx0, sy0, sx1, sy1), conf, _pg = sub
+            occs.append({"page": page, "x": sx0, "y": sy0, "w": sx1 - sx0, "h": sy1 - sy0,
+                         "q": "line", "conf": conf})
             continue
-        seen.add(norm)
-        box = merge_field(s, source_citations, html_blocks, json_blocks, pages, ocr_lines)
-        if box.match_quality in ("word", "line") and box.x is not None:
-            occs.append({"page": box.page, "x": box.x, "y": box.y, "w": box.w, "h": box.h, "q": box.match_quality})
+        best_words, best_score = [], 0.0
+        for n in forms:
+            words, score = _match_ocr_lines(n, lines, OCCURRENCE_OCR_THRESHOLD)
+            if words and score > best_score:
+                best_words, best_score = words, score
+        if best_words:
+            bbox = _union_bbox([w.bbox for w in best_words])
+            occs.append({"page": page, "x": bbox[0], "y": bbox[1], "w": bbox[2] - bbox[0], "h": bbox[3] - bbox[1],
+                         "q": "line", "conf": _avg_conf(best_words)})
+            continue
+
+        # 3) block-region fallback — the legitimate 'region match'
+        if region is not None and page is not None:
+            occs.append({"page": page, "x": region[0], "y": region[1],
+                         "w": region[2] - region[0], "h": region[3] - region[1],
+                         "q": "block", "conf": _avg_conf(block.words)})
     return occs
 
 
@@ -781,23 +836,18 @@ def merge_extraction(
         # every occurrence of the value on the document, primary location first
         locations: list[dict] = []
         if box.x is not None:
-            primary = {"page": box.page, "x": box.x, "y": box.y, "w": box.w, "h": box.h, "q": box.match_quality}
+            primary = {"page": box.page, "x": box.x, "y": box.y, "w": box.w, "h": box.h,
+                       "q": box.match_quality, "conf": box.confidence}
             locations.append(primary)
-            all_citations = citations + [c for c in source_citations if c not in citations]
 
-            # Locate the additional printed forms first (e.g. "45.0" and
-            # "M10X1.50X45.00"). These are precise word/line matches; adding them
-            # before _occurrence_boxes lets _add_location keep them over the coarse
-            # block-region fallback _occurrence_boxes emits for the same cited block.
-            if alt_sources:
-                alt_citations = sources_citations or all_citations
-                for occ in _alternate_occurrences(
-                    alt_sources, alt_citations, [value_str, source_text],
-                    html_blocks, json_blocks, pages, ocr_lines,
-                ):
-                    _add_location(locations, occ)
-
-            for occ in _occurrence_boxes(value_str, source_text, all_citations, html_blocks, json_blocks, pages):
+            # locate every printed form the extractor cited — value, primary source,
+            # and any alternates ("25.0", "M6.0X1.00X25.0") — across all cited blocks.
+            # _add_location keeps the most precise box when occurrences overlap.
+            all_needles = [source_text, value_str] + alt_sources
+            all_citations = citations
+            for extra in (source_citations, sources_citations):
+                all_citations = all_citations + [c for c in extra if c not in all_citations]
+            for occ in _locate_occurrences(all_needles, all_citations, html_blocks, json_blocks, pages, ocr_lines):
                 _add_location(locations, occ)
 
         # the primary occurrence may have been upgraded to a more precise overlapping
@@ -812,7 +862,7 @@ def merge_extraction(
                 {"x": primary_loc["x"], "y": primary_loc["y"], "w": primary_loc["w"], "h": primary_loc["h"]}
                 if primary_loc else (None if box.x is None else {"x": box.x, "y": box.y, "w": box.w, "h": box.h})
             ),
-            "confidence": box.confidence,
+            "confidence": primary_loc["conf"] if primary_loc else box.confidence,
             "match_quality": primary_loc["q"] if primary_loc else box.match_quality,
             "block_ids": box.block_ids,
             "locations": locations,

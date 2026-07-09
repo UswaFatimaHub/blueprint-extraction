@@ -125,6 +125,8 @@ class FieldLocation(BaseModel):
     w: float
     h: float
     q: str = "block"
+    # OCR confidence at this specific occurrence (None for engineer anchors / region fallbacks)
+    conf: float | None = None
 
 
 class ExtractedFieldOut(ORMModel):
