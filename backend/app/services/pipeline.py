@@ -19,7 +19,7 @@ from ..database import SessionLocal
 from ..models import Correction, Document, ExtractedField, Extraction, PromptVersion
 from . import prompt_builder
 from .datalab import get_client
-from .merge import apply_correction_anchors, merge_extraction
+from .merge import apply_correction_anchors, merge_extraction, uncovered_ocr_lines
 from .orientation import normalize_orientation
 
 logger = logging.getLogger(__name__)
@@ -137,7 +137,19 @@ def process_document(document_id: str) -> None:
         db.commit()
 
         # ---- Step 3: Extract (structured fields with citations) --------
-        page_schema = prompt_builder.build_page_schema(db, doc.part_type)
+        # Drawing views reach Extract only as lossy figure alt-text (callouts like
+        # 'INDENTATION' and min-tolerance numbers vanish or get mislabeled), while
+        # the OCR pass reads them fine — inject those hidden lines into the prompt.
+        drawing_annotations: dict[int, list[str]] = {}
+        try:
+            drawing_annotations = uncovered_ocr_lines(
+                ocr_result, convert_html, convert_result.get("json")
+            )
+        except Exception:
+            logger.exception("Annotation harvest failed for %s — extracting without it", doc.id)
+        _save_artifact(artifacts, "annotations.json", drawing_annotations)
+
+        page_schema = prompt_builder.build_page_schema(db, doc.part_type, drawing_annotations)
         _save_artifact(artifacts, "page_schema.json", page_schema)
         extract_result = client.extract(
             page_schema=page_schema,

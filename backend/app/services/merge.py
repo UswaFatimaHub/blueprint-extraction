@@ -226,6 +226,65 @@ def parse_ocr(ocr_payload) -> dict[int, list[OCRLine]]:
 
 
 # ---------------------------------------------------------------------------
+# Drawing-annotation harvest — OCR text Convert swallowed into image blocks
+# ---------------------------------------------------------------------------
+
+# an OCR line is "covered" when Convert emitted word spans over most of it;
+# uncovered lines live inside figure/picture regions Extract can't read
+_COVERAGE_THRESHOLD = 0.5
+_ANNOTATION_MIN_CONFIDENCE = 0.35
+_MAX_ANNOTATIONS_PER_PAGE = 80
+
+
+def uncovered_ocr_lines(ocr_payload, convert_html: str, convert_json) -> dict[int, list[str]]:
+    """OCR text lines that Convert has no word spans for, per page, in reading order.
+
+    Convert renders drawing views and pictorial headers as opaque Figure/Picture
+    blocks whose content reaches Extract only as lossy LLM alt-text (dimensions get
+    mislabeled, callouts like 'INDENTATION' vanish). The raw OCR pass reads those
+    printed annotations fine — this returns exactly the lines Extract would
+    otherwise never see, so they can be injected into the extraction prompt.
+    Sorted top-to-bottom so stacked max/min dimension pairs stay adjacent.
+    """
+    pages, json_blocks = parse_convert_json(convert_json)
+    html_blocks = parse_convert_html(convert_html, json_blocks)
+    ocr_lines = parse_ocr(ocr_payload)
+
+    # normalized corner boxes of every Convert word span, per page
+    word_boxes: dict[int, list[tuple[float, float, float, float]]] = {}
+    for block in html_blocks.values():
+        for w in block.words:
+            norm = _normalize_bbox(w.bbox, pages.get(w.page))
+            if norm:
+                word_boxes.setdefault(w.page, []).append(
+                    (norm[0], norm[1], norm[0] + norm[2], norm[1] + norm[3])
+                )
+
+    out: dict[int, list[str]] = {}
+    for page, lines in ocr_lines.items():
+        boxes = word_boxes.get(page, [])
+        kept: list[OCRLine] = []
+        for line in lines:
+            if line.confidence is not None and line.confidence < _ANNOTATION_MIN_CONFIDENCE:
+                continue
+            lx0, ly0, lx1, ly1 = line.bbox
+            area = max((lx1 - lx0) * (ly1 - ly0), 1e-9)
+            covered = 0.0
+            for x0, y0, x1, y1 in boxes:
+                ix = max(0.0, min(lx1, x1) - max(lx0, x0))
+                iy = max(0.0, min(ly1, y1) - max(ly0, y0))
+                covered += ix * iy
+                if covered / area >= _COVERAGE_THRESHOLD:
+                    break
+            if covered / area < _COVERAGE_THRESHOLD:
+                kept.append(line)
+        kept.sort(key=lambda l: (round(l.bbox[1], 2), l.bbox[0]))
+        if kept:
+            out[page] = [l.text for l in kept[:_MAX_ANNOTATIONS_PER_PAGE]]
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Fuzzy matching
 # ---------------------------------------------------------------------------
 

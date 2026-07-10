@@ -75,19 +75,23 @@ def build_field_description(field: FieldDefinition, warnings: dict[str, list[str
     return " ".join(p for p in parts if p)
 
 
-def build_root_description(part_type: PartType, standards: list[StandardRule]) -> str:
+def build_root_description(
+    part_type: PartType,
+    standards: list[StandardRule],
+    drawing_annotations: dict[int, list[str]] | None = None,
+) -> str:
     lines = [
         f"Analyze this engineering blueprint and extract the following attributes for a {part_type.name}.",
         "Read values exactly as printed on the drawing unless a formatting rule below says otherwise.",
         "If an attribute is not present on the drawing, return null for it.",
         "Every attribute has a companion *_source property: fill it with the exact text as printed on the "
         "document that the value was read or derived from — verbatim, character-for-character, keeping "
-        "abbreviations, punctuation and case (e.g. 'CONE.WASH' for a Cone Washer, 'SC&WA' for a Screw "
+        "abbreviations, punctuation and case (e.g. 'CONE.WASH' for a Conical Washer, 'SC&WA' for a Screw "
         "Assembly). Never normalize or expand the *_source text.",
         "Every attribute also has a companion *_sources array: list EVERY place that attribute is printed "
         "on the drawing, giving the exact printed text at each. The same value is frequently shown in "
         "several locations (a drawing view and a dimensions table) with slightly different formatting "
-        "(e.g. '45.0' vs '45.00') — enumerate all of them, exactly as printed, so each instance can be "
+        "(e.g. '50.0' vs '50.00') — enumerate all of them, exactly as printed, so each instance can be "
         "located on the sheet.",
     ]
     if standards:
@@ -95,11 +99,35 @@ def build_root_description(part_type: PartType, standards: list[StandardRule]) -
         lines.append("COMPANY FORMATTING RULES:")
         for i, s in enumerate(standards, 1):
             lines.append(f"{i}. {s.rule.strip()}")
+    if drawing_annotations:
+        lines += [
+            "",
+            "DRAWING-VIEW ANNOTATIONS (raw OCR): the drawing views on this document reach you only as "
+            "figure descriptions, which can be lossy or mislabel dimensions. The lines below are what is "
+            "ACTUALLY printed inside those image regions, listed top-to-bottom. Trust them over a figure "
+            "description when the two disagree. A dimension printed as a number directly above a slightly "
+            "smaller one (e.g. '14.00' above '13.30', or '25.00' above '24.20') is the MAX/MIN tolerance "
+            "pair of ONE dimension — the larger number is the maximum. OCR can misread characters "
+            "(e.g. '6g' read as '69'). When a value comes from one of these lines, copy the line verbatim "
+            "into the *_source property and cite the figure/diagram block that contains it.",
+        ]
+        for page in sorted(drawing_annotations):
+            texts = [t for t in drawing_annotations[page] if t.strip()]
+            if texts:
+                lines.append(f"Page {page + 1}: " + " | ".join(f"'{t}'" for t in texts))
     return "\n".join(lines)
 
 
-def build_page_schema(db: Session, part_type: PartType) -> dict:
-    """Assemble the JSON schema sent to the Datalab Extract API."""
+def build_page_schema(
+    db: Session,
+    part_type: PartType,
+    drawing_annotations: dict[int, list[str]] | None = None,
+) -> dict:
+    """Assemble the JSON schema sent to the Datalab Extract API.
+
+    drawing_annotations (per-document, from merge.uncovered_ocr_lines) carries the
+    OCR text of drawing-view callouts that Convert hides inside figure blocks.
+    """
     standards = get_active_standards(db)
     warnings = get_correction_warnings(db)
     active_fields = [f for f in part_type.fields if f.active]
@@ -130,8 +158,8 @@ def build_page_schema(db: Session, part_type: PartType) -> dict:
                 f"EVERY place '{field.label}' is printed on the drawing, as the exact text at each "
                 "location — verbatim, character-for-character (never normalize or reformat). The same "
                 "value is often printed in more than one spot (e.g. in a drawing view AND a dimensions "
-                "table) and may be written slightly differently at each (e.g. '45.0' in the view vs "
-                "'45.00' in the table) — list each occurrence separately, exactly as it reads there, and "
+                "table) and may be written slightly differently at each (e.g. '50.0' in the view vs "
+                "'50.00' in the table) — list each occurrence separately, exactly as it reads there, and "
                 "cite each one. Include the primary occurrence too. Empty list if it is not printed."
             ),
         }
@@ -139,7 +167,7 @@ def build_page_schema(db: Session, part_type: PartType) -> dict:
     return {
         "type": "object",
         "title": f"{part_type.name}Extraction",
-        "description": build_root_description(part_type, standards),
+        "description": build_root_description(part_type, standards, drawing_annotations),
         "properties": properties,
     }
 
@@ -166,14 +194,14 @@ def build_prompt_text(db: Session, part_type: PartType) -> str:
     else:
         lines.append("(none configured)")
 
-    lines += ["", "KNOWN ISSUES — PAY ATTENTION TO THESE:"]
-    any_warning = False
-    for f in active_fields:
-        for w in warnings.get(f.key, []):
-            lines.append(f"- {f.label}: {w}")
-            any_warning = True
-    if not any_warning:
-        lines.append("(no correction feedback accumulated yet)")
+    # Only surface the KNOWN ISSUES section when there is actually feedback to show
+    warning_lines = [
+        f"- {f.label}: {w}"
+        for f in active_fields
+        for w in warnings.get(f.key, [])
+    ]
+    if warning_lines:
+        lines += ["", "KNOWN ISSUES — PAY ATTENTION TO THESE:", *warning_lines]
 
     lines += [
         "",
@@ -181,10 +209,10 @@ def build_prompt_text(db: Session, part_type: PartType) -> str:
         + ", ".join(f.key for f in active_fields)
         + ". Use null for attributes not present on the drawing.",
         "For every attribute also fill its companion <key>_source property with the exact printed text the "
-        "value came from, verbatim (e.g. washer='Cone Washer' with washer_source='CONE.WASH').",
+        "value came from, verbatim (e.g. washer='Conical Washer 10MM OD' with washer_source='CONE.WASH').",
         "Also fill <key>_sources with every place that attribute is printed on the drawing (exact text at "
         "each) — the same value often appears in several spots with slightly different formatting "
-        "(e.g. length='45.00' with length_sources=['45.00', '45.0']).",
+        "(e.g. length='50.00' with length_sources=['50.00', '50.0']).",
     ]
     return "\n".join(lines)
 
