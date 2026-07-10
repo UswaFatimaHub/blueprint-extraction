@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "WebFetch(domain:www.datalab.to)"
+      "WebFetch(domain:www.datalab.to)",
+      "WebFetch(domain:documentation.datalab.to)"
     ]
   }
 }

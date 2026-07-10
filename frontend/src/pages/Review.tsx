@@ -244,7 +244,14 @@ function FieldRow({
         </span>
 
         <div className="w-[128px] shrink-0">
-          <p className="text-[13px] font-medium leading-tight text-ink-secondary">{field.label}</p>
+          <p className="flex items-center gap-1 text-[13px] font-medium leading-tight text-ink-secondary">
+            {field.label}
+            {field.attention && (
+              <span title="Drawing disagrees with printed text — see reasoning" className="shrink-0">
+                <AlertTriangle size={13} strokeWidth={2.4} className="attention-glow fill-crit/20 text-crit" />
+              </span>
+            )}
+          </p>
           <p className={cn('mt-0.5 flex items-center gap-1 font-mono text-[11px] uppercase tracking-[0.06em]', match.className)}>
             <Crosshair size={11} strokeWidth={2.2} />
             {match.label}
@@ -354,15 +361,26 @@ function FieldRow({
       {/* AI reasoning for the selected field */}
       {active && !correcting && (field.ai_reasoning || sourceDiffers) && (
         <div className="flex items-start gap-2 border-t border-line bg-surface-2/40 py-2.5 pl-4 pr-3.5 animate-fade-in">
-          <Sparkles size={14} className="mt-0.5 shrink-0 text-accent/80" />
+          {field.attention ? (
+            <AlertTriangle size={14} className="attention-glow mt-0.5 shrink-0 text-crit" />
+          ) : (
+            <Sparkles size={14} className="mt-0.5 shrink-0 text-accent/80" />
+          )}
           <div className="min-w-0 text-[13px] leading-relaxed text-ink-secondary">
+            {field.attention && field.attention_note && (
+              <p className="font-medium text-crit">{field.attention_note}</p>
+            )}
             {sourceDiffers && (
-              <p>
+              <p className={cn(field.attention && field.attention_note && 'mt-1')}>
                 Found <span className="font-mono text-accent-bright/90">“{field.source_text}”</span> printed on the
                 document and interpreted it as <span className="font-mono text-accent-bright/90">“{field.value}”</span>.
               </p>
             )}
-            {field.ai_reasoning && <p className={cn(sourceDiffers && 'mt-1')}>{field.ai_reasoning}</p>}
+            {field.ai_reasoning && (
+              <p className={cn((sourceDiffers || (field.attention && field.attention_note)) && 'mt-1')}>
+                {field.ai_reasoning}
+              </p>
+            )}
           </div>
         </div>
       )}

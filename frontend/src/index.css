@@ -193,6 +193,18 @@
   animation: bbox-pulse 1.2s ease-out 2;
 }
 
+/* glowing pulse for the needs-attention warning triangle */
+@keyframes attention-glow {
+  0%, 100% { filter: drop-shadow(0 0 2px rgb(var(--crit) / 0.9)); }
+  50% { filter: drop-shadow(0 0 7px rgb(var(--crit) / 0.55)); }
+}
+.attention-glow {
+  animation: attention-glow 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .attention-glow { animation: none; filter: drop-shadow(0 0 4px rgb(var(--crit) / 0.7)); }
+}
+
 /* status LED with halo */
 .led {
   position: relative;

@@ -57,6 +57,10 @@ export interface ExtractedField {
   match_quality: MatchQuality
   source_text: string | null
   ai_reasoning: string | null
+  /** drawn-geometry cross-check disagreed with the printed text — needs engineer eyes */
+  attention?: boolean
+  /** one-line summary of the disagreement (both values), shown above the reasoning */
+  attention_note?: string | null
   status: FieldStatus
   corrected_value: string | null
   sort_order: number

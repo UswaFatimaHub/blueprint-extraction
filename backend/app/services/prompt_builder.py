@@ -164,6 +164,37 @@ def build_page_schema(
             ),
         }
 
+    # Independent visual cross-check of the head style: the drawn side-view geometry
+    # (head diameter vs height vs shank) sometimes contradicts the printed abbreviation
+    # (e.g. 06513835AA prints 'RD HD' but is drawn as a pan-head profile). The printed
+    # text stays the extracted value; a disagreement flags the field for the engineer.
+    if any(f.key == "headStyle" for f in active_fields):
+        properties["headStyle_geometry"] = {
+            "type": ["string", "null"],
+            "description": (
+                "VISUAL cross-check of the head style. IGNORE every printed word, abbreviation and "
+                "table — do NOT use the title block or item name for this property. Look ONLY at the "
+                "side-profile drawing view of the fastener and classify the HEAD SILHOUETTE from its "
+                "drawn geometry and dimensions. For domed heads compute the ratio head height ÷ MAX "
+                "head diameter and apply it strictly: ratio 0.45 or more → 'Round Head' (a true "
+                "semicircular dome); ratio below 0.45 → 'Pan Head' (low wide dome, flat bearing "
+                "surface). E.g. height 6.0 on diameter 16.00 → 0.38 → Pan Head. Non-domed shapes: "
+                "'Hex Head' = straight-sided hexagon (trapezoid from the side); 'Flange Head' = head "
+                "with a wide washer-like flange at its base; 'Flat Head' = countersunk cone with a "
+                "flat top. State the ratio in headStyle_geometry_reason. Cite the diagram/figure block "
+                "of the side view you judged this from. Null when no drawing view shows the head "
+                "profile."
+            ),
+        }
+        properties["headStyle_geometry_reason"] = {
+            "type": ["string", "null"],
+            "description": (
+                "The drawn head geometry behind the headStyle_geometry classification, in one or two "
+                "sentences: the head diameter, head height and shank diameter you read from the side "
+                "view and how those proportions led to the classification."
+            ),
+        }
+
     return {
         "type": "object",
         "title": f"{part_type.name}Extraction",
@@ -214,6 +245,13 @@ def build_prompt_text(db: Session, part_type: PartType) -> str:
         "each) — the same value often appears in several spots with slightly different formatting "
         "(e.g. length='50.00' with length_sources=['50.00', '50.0']).",
     ]
+    if any(f.key == "headStyle" for f in active_fields):
+        lines.append(
+            "Additionally fill headStyle_geometry: classify the head silhouette purely from the drawn "
+            "side-view geometry (head diameter vs height vs shank — ignore all printed text), citing the "
+            "diagram block, with the proportions in headStyle_geometry_reason. When it disagrees with the "
+            "printed head style, the field is flagged for engineer review."
+        )
     return "\n".join(lines)
 
 

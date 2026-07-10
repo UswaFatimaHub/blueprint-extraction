@@ -791,6 +791,12 @@ _NULL_CONCLUSION = re.compile(
     re.IGNORECASE,
 )
 _PASS_TRAILER = re.compile(r"\s*\bPASS:?\s*(?:Conclusion:.*)?$", re.DOTALL)
+# a failing verifier states the value it believes is correct:
+# "Conclusion: Round Head, which does not agree with the extraction (Hex Head)."
+_FIX_CONCLUSION = re.compile(
+    r"Conclusion:\s*(?P<fix>.+?),\s*which does not agree with the extraction\b",
+    re.IGNORECASE | re.DOTALL,
+)
 
 
 def _clean_verifier_text(text: str) -> str:
@@ -801,7 +807,37 @@ def _clean_verifier_text(text: str) -> str:
     return text.strip()
 
 
-def _field_meta(values: dict, key: str) -> str | None:
+def _verifier_fix(values: dict, key: str) -> str | None:
+    """The corrected value from a failing balanced-mode verification, if it stated one.
+
+    Datalab's verifier re-reads the document independently of the extractor; on
+    FAIL_FIX its feedback ends with a definitive "Conclusion: <value>, which does
+    not agree with the extraction (...)". The conclusion is the verifier's answer,
+    so prefer it over the extraction it just refuted.
+    """
+    meta = values.get(f"{key}_meta")
+    if not isinstance(meta, dict):
+        return None
+    verification = meta.get("verification")
+    if not isinstance(verification, dict):
+        return None
+    status = verification.get("status")
+    if not isinstance(status, str) or not status.startswith("FAIL"):
+        return None
+    feedback = verification.get("feedback")
+    if not isinstance(feedback, str):
+        return None
+    m = _FIX_CONCLUSION.search(feedback)
+    if not m:
+        return None
+    fix = m.group("fix").strip().strip("'\"").strip()
+    # a null-ish conclusion is not a usable replacement value
+    if not fix or fix.lower().startswith(("the document does not", "null", "none")):
+        return None
+    return fix
+
+
+def _field_meta(values: dict, key: str, fix_applied: tuple[str | None, str] | None = None) -> str | None:
     """Surface balanced-mode reasoning/verification for the UI."""
     meta = values.get(f"{key}_meta")
     if not isinstance(meta, dict):
@@ -817,6 +853,13 @@ def _field_meta(values: dict, key: str) -> str | None:
     v_status = verification.get("status") if isinstance(verification, dict) else None
     if status and status != "EXTRACTED":
         parts.append(f"Datalab extraction status: {status} — this value has no source citation; verify it carefully.")
+    elif fix_applied is not None:
+        orig, fix = fix_applied
+        parts.append(
+            f"Datalab verification: {v_status} — the extractor returned "
+            f"{'no value' if orig is None else repr(orig)} but the verifier concluded {fix!r}; "
+            "the verifier's value was applied."
+        )
     elif v_status and v_status != "PASS":
         parts.append(f"Datalab verification: {v_status} — verify this value carefully.")
     feedback = verification.get("feedback") if isinstance(verification, dict) else None
@@ -863,6 +906,17 @@ def merge_extraction(
         if not isinstance(sources_citations, list):
             sources_citations = [sources_citations]
         sources_citations = [str(c) for c in sources_citations]
+
+        # a failing verifier that states a definitive conclusion overrides the
+        # extraction it refuted (e.g. extractor said 'Hex Head', verifier read
+        # 'RD HD' and concluded 'Round Head')
+        fix_applied: tuple[str | None, str] | None = None
+        fix = _verifier_fix(values, key)
+        if fix is not None:
+            has_value = value is not None and str(value).strip()
+            if not has_value or _normalize(str(value)) != _normalize(fix):
+                fix_applied = (str(value) if has_value else None, fix)
+                value = fix
 
         if value is None or (isinstance(value, str) and not value.strip()):
             results[key] = {
@@ -925,6 +979,77 @@ def merge_extraction(
             "match_quality": primary_loc["q"] if primary_loc else box.match_quality,
             "block_ids": box.block_ids,
             "locations": locations,
-            "reasoning": _field_meta(values, key),
+            "reasoning": _field_meta(values, key, fix_applied),
         }
+
+        _apply_geometry_check(results[key], values, key, html_blocks, json_blocks, pages)
     return results
+
+
+def _apply_geometry_check(
+    result: dict,
+    values: dict,
+    key: str,
+    html_blocks: dict,
+    json_blocks: dict,
+    pages: dict,
+) -> None:
+    """Cross-check a text-read value against the companion drawn-geometry classification.
+
+    The extractor fills {key}_geometry from the side-view drawing alone (ignoring
+    printed text). The printed text stays the value; a disagreement is surfaced in
+    the reasoning, the cited drawing view is added as a reference location, and the
+    field is flagged for engineer attention.
+    """
+    geom_raw = values.get(f"{key}_geometry")
+    # the geometry answer itself gets verified in balanced mode — prefer a
+    # failing verifier's conclusion over the classification it refuted
+    geom = _verifier_fix(values, f"{key}_geometry") or (
+        geom_raw if isinstance(geom_raw, str) and geom_raw.strip() else None
+    )
+    if geom is None or result.get("value") is None:
+        return
+
+    # highlight the drawing view the geometry was judged from
+    citations = values.get(f"{key}_geometry_citations") or []
+    if not isinstance(citations, list):
+        citations = [citations]
+    locations = result.get("locations") or []
+    for cited in citations:
+        block = _resolve_block(str(cited), html_blocks, json_blocks)
+        if block is None:
+            continue
+        norm = _norm_block_bbox(block, pages)
+        if norm is None:
+            continue
+        loc = {"page": block.page, "x": norm[0], "y": norm[1],
+               "w": norm[2] - norm[0], "h": norm[3] - norm[1], "q": "block", "conf": None}
+        if not any(l.get("page") == loc["page"] and _xywh_overlap(l, loc) and l.get("q") == "block"
+                   for l in locations):
+            locations.append(loc)
+    result["locations"] = locations
+
+    reason_raw = values.get(f"{key}_geometry_reason")
+    reason = reason_raw.strip() if isinstance(reason_raw, str) and reason_raw.strip() else None
+
+    parts = [result.get("reasoning") or ""]
+    if _normalize(geom) != _normalize(str(result["value"])):
+        result["attention"] = True
+        source = result.get("source_text")
+        printed = f"the printed text reads {source!r} (→ {result['value']!r})" if source else \
+            f"the printed text gives {result['value']!r}"
+        # one-line summary with both values, shown by the UI above the full reasoning
+        result["attention_note"] = (
+            f"Printed text says {result['value']!r}, but the drawing suggests {geom!r} — review which is correct."
+        )
+        conflict = (
+            f"NEEDS ATTENTION — drawing disagrees with printed text: {printed}, "
+            f"but the drawn side-view geometry looks like {geom!r}."
+        )
+        if reason:
+            conflict += f" {reason}"
+        conflict += " The referenced drawing view is highlighted among this field's locations — review which is correct."
+        parts.append(conflict)
+    elif reason:
+        parts.append(f"Drawing-geometry cross-check agrees: {reason}")
+    result["reasoning"] = " ".join(p for p in parts if p).strip() or None

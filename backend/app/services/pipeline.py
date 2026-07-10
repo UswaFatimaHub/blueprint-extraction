@@ -225,6 +225,8 @@ def process_document(document_id: str) -> None:
                 match_quality=m.get("match_quality") or "none",
                 source_text=m.get("source_text"),
                 ai_reasoning=m.get("reasoning"),
+                attention=m.get("attention", False),
+                attention_note=m.get("attention_note"),
                 sort_order=i,
             ))
 

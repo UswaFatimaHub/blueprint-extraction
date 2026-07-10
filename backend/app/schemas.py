@@ -144,6 +144,10 @@ class ExtractedFieldOut(ORMModel):
     match_quality: str
     source_text: str | None
     ai_reasoning: str | None
+    # drawn-geometry cross-check disagreed with the printed text — needs engineer eyes
+    attention: bool = False
+    # one-line summary of the disagreement (both values), shown above the reasoning
+    attention_note: str | None = None
     status: str
     corrected_value: str | None
     sort_order: int

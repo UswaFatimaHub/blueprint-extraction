@@ -139,6 +139,10 @@ class ExtractedField(Base):
     # verbatim printed text the value was derived from (e.g. "CONE.WASH" -> "Cone Washer")
     source_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     ai_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # drawn-geometry cross-check disagreed with the printed text — engineer must look
+    attention: Mapped[bool] = mapped_column(Boolean, default=False)
+    # one-line summary of the disagreement (both values), shown above the reasoning
+    attention_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     # unverified | verified | corrected
     status: Mapped[str] = mapped_column(String(20), default="unverified")
     corrected_value: Mapped[str | None] = mapped_column(Text, nullable=True)

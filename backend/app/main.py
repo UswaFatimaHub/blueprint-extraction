@@ -58,6 +58,8 @@ def _run_migrations():
         "ALTER TABLE corrections ADD COLUMN prev_bbox_w FLOAT",
         "ALTER TABLE corrections ADD COLUMN prev_bbox_h FLOAT",
         "ALTER TABLE corrections ADD COLUMN prev_locations JSON",
+        "ALTER TABLE extracted_fields ADD COLUMN attention BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE extracted_fields ADD COLUMN attention_note TEXT",
     ]
     for stmt in migrations:
         try:
