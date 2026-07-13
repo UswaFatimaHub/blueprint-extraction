@@ -71,7 +71,16 @@ def build_field_description(field: FieldDefinition, warnings: dict[str, list[str
         parts.append(f"Examples: {field.example}")
     field_warnings = warnings.get(field.key, [])
     if field_warnings:
-        parts.append("KNOWN ISSUES — PAY ATTENTION: " + " | ".join(field_warnings))
+        parts.append(
+            "ENGINEER CORRECTIONS — AUTHORITATIVE WHEN THEY MATCH: a reviewing engineer corrected this "
+            "field on past documents; each lesson describes the evidence that made the printed text "
+            "wrong there. First check whether THIS document shows the same evidence (the same printed "
+            "text AND the same drawn/tabulated situation the lesson describes). If it does, the lesson "
+            "OVERRIDES every other instruction for this field, including the read-exactly-as-printed "
+            "rule. If this document's evidence does not match the lesson's description, do NOT apply "
+            "it — read what this document actually shows: "
+            + " | ".join(field_warnings)
+        )
     return " ".join(p for p in parts if p)
 
 
@@ -82,7 +91,9 @@ def build_root_description(
 ) -> str:
     lines = [
         f"Analyze this engineering blueprint and extract the following attributes for a {part_type.name}.",
-        "Read values exactly as printed on the drawing unless a formatting rule below says otherwise.",
+        "Read values exactly as printed on the drawing unless a formatting rule below or an ENGINEER "
+        "CORRECTIONS note on the field says otherwise — engineer corrections are ground truth and take "
+        "precedence over the printed text they correct.",
         "If an attribute is not present on the drawing, return null for it.",
         "Every attribute has a companion *_source property: fill it with the exact text as printed on the "
         "document that the value was read or derived from — verbatim, character-for-character, keeping "
@@ -232,7 +243,13 @@ def build_prompt_text(db: Session, part_type: PartType) -> str:
         for w in warnings.get(f.key, [])
     ]
     if warning_lines:
-        lines += ["", "KNOWN ISSUES — PAY ATTENTION TO THESE:", *warning_lines]
+        lines += [
+            "",
+            "ENGINEER CORRECTIONS — AUTHORITATIVE WHEN THEY MATCH (check the lesson's evidence against "
+            "this document first; on a match they override every other instruction, including "
+            "read-exactly-as-printed; otherwise ignore them):",
+            *warning_lines,
+        ]
 
     lines += [
         "",
